@@ -1,0 +1,14 @@
+name: eos-eapi
+transport: eapi
+platform: eos
+
+eapi:
+  port: 443
+  protocol: https
+  verify_ssl: false
+
+capabilities:
+  config_sessions: true
+  session_diff: true
+  json_output: true
+  config_replace: true

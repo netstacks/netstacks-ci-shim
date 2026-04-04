@@ -1,0 +1,21 @@
+# Device inventory
+# Credentials use vault:// references in production.
+# For local dev/testing, inline credentials are supported.
+
+devices:
+  leaf01-eos:
+    hostname: 10.1.1.103
+    driver: eos-eapi
+    credential:
+      username: cwdavis
+      password: viperdavis69
+
+  pe1-xr:
+    hostname: 10.0.0.1
+    driver: iosxr-netconf
+    credential: vault://network/pe1-xr
+
+  pe2-xr:
+    hostname: 10.0.0.2
+    driver: iosxr-netconf
+    credential: vault://network/pe2-xr

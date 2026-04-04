@@ -1,0 +1,30 @@
+name: paloalto-panorama
+transport: rest_api
+platform: paloalto
+
+rest_api:
+  base_path: /restapi/v10.2
+  auth:
+    type: api_key
+    header: X-PAN-KEY
+
+resources:
+  security_rule:
+    create: POST /restapi/v10.2/Policies/SecurityRules?location=vsys&vsys=vsys1
+    read:   GET  /restapi/v10.2/Policies/SecurityRules?location=vsys&vsys=vsys1&name={name}
+    update: PUT  /restapi/v10.2/Policies/SecurityRules?location=vsys&vsys=vsys1&name={name}
+    delete: DELETE /restapi/v10.2/Policies/SecurityRules?location=vsys&vsys=vsys1&name={name}
+    id_field: name
+
+  address_object:
+    create: POST /restapi/v10.2/Objects/Addresses?location=vsys&vsys=vsys1
+    read:   GET  /restapi/v10.2/Objects/Addresses?location=vsys&vsys=vsys1&name={name}
+    update: PUT  /restapi/v10.2/Objects/Addresses?location=vsys&vsys=vsys1&name={name}
+    delete: DELETE /restapi/v10.2/Objects/Addresses?location=vsys&vsys=vsys1&name={name}
+    id_field: name
+
+  commit:
+    action: POST /restapi/v10.2/Operations/Commit
+
+  dependencies:
+    security_rule: [address_object]

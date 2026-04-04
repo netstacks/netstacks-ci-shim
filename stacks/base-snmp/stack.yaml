@@ -1,0 +1,7 @@
+name: base-snmp
+description: SNMP monitoring configuration
+template: base-snmp.j2
+priority: 20
+
+devices:
+  - leaf01-eos

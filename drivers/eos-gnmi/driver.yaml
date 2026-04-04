@@ -1,0 +1,12 @@
+name: eos-gnmi
+transport: gnmi
+platform: eos
+
+gnmi:
+  port: 6030
+  encoding: json_ietf
+  tls: true
+
+capabilities:
+  config_replace: true
+  openconfig: true

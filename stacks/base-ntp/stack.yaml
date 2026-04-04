@@ -1,0 +1,7 @@
+name: base-ntp
+description: NTP server configuration
+template: base-ntp.j2
+priority: 10
+
+devices:
+  - leaf01-eos

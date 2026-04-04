@@ -1,0 +1,17 @@
+name: iosxr-netconf
+transport: netconf
+platform: iosxr
+
+netconf:
+  port: 830
+  hostkey_verify: false
+
+capabilities:
+  config_replace: true
+  candidate_datastore: true
+  commit_confirm: true
+  rollback_on_error: true
+
+yang_models:
+  native: Cisco-IOS-XR
+  openconfig: true
