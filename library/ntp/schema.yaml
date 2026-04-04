@@ -1,0 +1,24 @@
+# Variable schema for the NTP service template.
+# Used by the shim to validate variables before rendering,
+# and by NetStacks UI to generate input forms.
+
+name: ntp
+description: NTP server configuration
+platforms: [eos, ios, iosxr]
+
+variables:
+  ntp_servers:
+    type: list
+    required: true
+    description: NTP servers to configure
+    items:
+      address:
+        type: string
+        required: true
+        description: NTP server IP address
+        example: "10.0.0.1"
+      prefer:
+        type: boolean
+        required: false
+        default: false
+        description: Mark this server as preferred

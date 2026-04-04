@@ -1,7 +1,0 @@
-{%- for server in ntp_servers %}
-{%- if server.get('prefer') %}
-ntp server {{ server.address }} prefer
-{%- else %}
-ntp server {{ server.address }}
-{%- endif %}
-{%- endfor %}

@@ -1,0 +1,6 @@
+name: fw-allow-cust-a-web
+description: Allow Customer A web traffic through firewall
+template: fw-security-rule
+
+devices:
+  - fw-panorama-01

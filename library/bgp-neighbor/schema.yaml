@@ -1,0 +1,42 @@
+name: bgp-neighbor
+description: BGP peering configuration
+platforms: [eos]
+
+variables:
+  bgp_as:
+    type: integer
+    required: true
+    description: Local BGP AS number
+    example: 65000
+
+  router_id:
+    type: string
+    required: true
+    description: BGP router ID (usually Loopback0 IP)
+    example: "10.255.0.1"
+
+  bgp_neighbors:
+    type: list
+    required: true
+    description: BGP neighbor sessions
+    items:
+      address:
+        type: string
+        required: true
+        description: Neighbor IP address
+        example: "10.255.0.2"
+      remote_as:
+        type: integer
+        required: true
+        description: Neighbor AS number
+        example: 65000
+      update_source:
+        type: string
+        required: true
+        description: Source interface for BGP session
+        example: "Loopback0"
+      description:
+        type: string
+        required: false
+        description: Neighbor description
+        example: "RR1-NYC"

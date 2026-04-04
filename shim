@@ -33,7 +33,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent
 INVENTORY_FILE = REPO_ROOT / "inventory.yaml"
-TEMPLATES_DIR = REPO_ROOT / "templates"
+LIBRARY_DIR = REPO_ROOT / "library"
 STACKS_DIR = REPO_ROOT / "stacks"
 DRIVERS_DIR = REPO_ROOT / "drivers"
 RENDERED_DIR = REPO_ROOT / "rendered"
@@ -109,14 +109,45 @@ def get_stacks_for_device(device_name):
 # Render
 # ---------------------------------------------------------------------------
 
-def render_template(template_name, variables):
+def resolve_template(template_ref):
+    """Resolve a template reference to a file path.
+
+    Supports two formats:
+      - Library reference: "ntp" → library/ntp/template.j2
+      - Direct file path:  "ntp-eos.j2" → library/*/ntp-eos.j2 or templates/ntp-eos.j2
+    """
+    # Check if it's a library service name (no extension)
+    lib_path = LIBRARY_DIR / template_ref / "template.j2"
+    if lib_path.exists():
+        return lib_path
+
+    # Check if it's a direct .j2 filename in any library folder
+    for service_dir in LIBRARY_DIR.iterdir():
+        if service_dir.is_dir():
+            candidate = service_dir / template_ref
+            if candidate.exists():
+                return candidate
+
+    # Fallback: check old templates/ dir for backwards compat
+    old_path = REPO_ROOT / "templates" / template_ref
+    if old_path.exists():
+        return old_path
+
+    return None
+
+
+def render_template(template_ref, variables):
     """Render a Jinja2 template with the given variables."""
+    template_path = resolve_template(template_ref)
+    if template_path is None:
+        raise FileNotFoundError(f"Template not found: {template_ref}")
+
     env = jinja2.Environment(
-        loader=jinja2.FileSystemLoader(str(TEMPLATES_DIR)),
+        loader=jinja2.FileSystemLoader(str(template_path.parent)),
         undefined=jinja2.StrictUndefined,
         keep_trailing_newline=True,
     )
-    template = env.get_template(template_name)
+    template = env.get_template(template_path.name)
     return template.render(**variables)
 
 
@@ -595,6 +626,79 @@ def cmd_status(args):
 
 
 # ---------------------------------------------------------------------------
+# Library
+# ---------------------------------------------------------------------------
+
+def cmd_library(args):
+    """List available service templates from the library."""
+    if not LIBRARY_DIR.exists():
+        print("No library found.")
+        return
+
+    services = []
+    for service_dir in sorted(LIBRARY_DIR.iterdir()):
+        if not service_dir.is_dir():
+            continue
+        schema_path = service_dir / "schema.yaml"
+        if schema_path.exists():
+            schema = load_yaml(schema_path)
+        else:
+            schema = {}
+
+        name = schema.get("name", service_dir.name)
+        desc = schema.get("description", "")
+        platforms = ", ".join(schema.get("platforms", []))
+        has_template = (service_dir / "template.j2").exists()
+
+        services.append((name, desc, platforms, has_template))
+
+    if args.service:
+        # Show detail for one service
+        service_dir = LIBRARY_DIR / args.service
+        if not service_dir.exists():
+            print(f"Service '{args.service}' not found in library.")
+            return 1
+
+        schema_path = service_dir / "schema.yaml"
+        if schema_path.exists():
+            schema = load_yaml(schema_path)
+        else:
+            schema = {}
+
+        print(f"Service: {schema.get('name', args.service)}")
+        print(f"Description: {schema.get('description', '(none)')}")
+        print(f"Platforms: {', '.join(schema.get('platforms', []))}")
+        print()
+
+        variables = schema.get("variables", {})
+        if variables:
+            print("Variables:")
+            print(f"  {'Name':<25} {'Type':<10} {'Required':<10} Description")
+            print(f"  {'-'*25} {'-'*10} {'-'*10} {'-'*30}")
+            for var_name, var_def in variables.items():
+                if isinstance(var_def, dict):
+                    vtype = var_def.get("type", "?")
+                    req = "yes" if var_def.get("required") else "no"
+                    desc = var_def.get("description", "")
+                    print(f"  {var_name:<25} {vtype:<10} {req:<10} {desc}")
+        print()
+
+        # Show example if README exists
+        readme = service_dir / "README.md"
+        if readme.exists():
+            print(f"See library/{args.service}/README.md for full documentation.")
+    else:
+        # List all services
+        print(f"{'Service':<20} {'Platforms':<25} Description")
+        print(f"{'-'*20} {'-'*25} {'-'*40}")
+        for name, desc, platforms, has_template in services:
+            status = "" if has_template else " (no template)"
+            print(f"{name:<20} {platforms:<25} {desc}{status}")
+
+    print()
+
+
+# ---------------------------------------------------------------------------
 # Main CLI
 # ---------------------------------------------------------------------------
 
@@ -636,6 +740,10 @@ def main():
     # status
     sub.add_parser("status", help="Show device and stack status")
 
+    # library
+    p = sub.add_parser("library", help="Browse available service templates")
+    p.add_argument("service", nargs="?", help="Service name for details")
+
     args = parser.parse_args()
 
     if args.command is None:
@@ -651,6 +759,7 @@ def main():
         "validate": cmd_validate,
         "pull": cmd_pull,
         "status": cmd_status,
+        "library": cmd_library,
     }
 
     result = cmd_map[args.command](args)

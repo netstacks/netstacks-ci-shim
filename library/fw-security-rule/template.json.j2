@@ -1,0 +1,25 @@
+{
+  "entry": {
+    "@name": "{{ rule_name }}",
+    "from": {
+      "member": {{ src_zones | tojson }}
+    },
+    "to": {
+      "member": {{ dst_zones | tojson }}
+    },
+    "source": {
+      "member": {{ src_addresses | tojson }}
+    },
+    "destination": {
+      "member": {{ dst_addresses | tojson }}
+    },
+    "application": {
+      "member": {{ applications | tojson }}
+    },
+    "service": {
+      "member": ["application-default"]
+    },
+    "action": "{{ action }}",
+    "log-setting": "{{ log_profile }}"
+  }
+}

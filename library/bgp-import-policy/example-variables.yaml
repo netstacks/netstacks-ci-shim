@@ -1,0 +1,27 @@
+# BGP Import Policy for Customer A
+# The engineer fills this in. They never see XML.
+
+policy_name: CUST-A-IMPORT
+
+community_lists:
+  - name: CUST-A-COMMS
+    members:
+      - "65000:100"
+      - "65000:200"
+  - name: CUST-REGEX
+    members:
+      - "65000:[1-9][0-9][0-9]"    # regex: matches 65000:100-999
+
+statements:
+  - sequence: 10
+    action: permit
+    match_community: CUST-A-COMMS
+    set_local_pref: 200
+
+  - sequence: 20
+    action: permit
+    match_community: CUST-REGEX
+    set_local_pref: 150
+
+  - sequence: 999
+    action: deny

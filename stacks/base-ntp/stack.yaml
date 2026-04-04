@@ -1,6 +1,6 @@
 name: base-ntp
 description: NTP server configuration
-template: base-ntp.j2
+template: ntp
 priority: 10
 
 devices:

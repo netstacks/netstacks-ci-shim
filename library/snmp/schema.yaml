@@ -1,0 +1,30 @@
+name: snmp
+description: SNMP monitoring configuration
+platforms: [eos, ios]
+
+variables:
+  snmp_contact:
+    type: string
+    required: true
+    description: SNMP contact name
+    example: "netops-team"
+
+  snmp_location:
+    type: string
+    required: true
+    description: Device physical location
+    example: "NYC-DC1-Row3-Rack12"
+
+  snmp_community:
+    type: string
+    required: true
+    description: SNMP community string
+    sensitive: true
+    example: "my_community"
+
+  snmp_community_access:
+    type: string
+    required: true
+    description: Access level
+    choices: [ro, rw]
+    default: ro

@@ -1,6 +1,6 @@
 name: base-snmp
 description: SNMP monitoring configuration
-template: base-snmp.j2
+template: snmp
 priority: 20
 
 devices:

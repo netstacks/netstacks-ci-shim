@@ -1,0 +1,19 @@
+<config>
+  <system xmlns="http://openconfig.net/yang/system">
+    <ntp>
+      <servers>
+        {%- for server in ntp_servers %}
+        <server>
+          <address>{{ server.address }}</address>
+          <config>
+            <address>{{ server.address }}</address>
+            {%- if server.get('prefer') %}
+            <prefer>true</prefer>
+            {%- endif %}
+          </config>
+        </server>
+        {%- endfor %}
+      </servers>
+    </ntp>
+  </system>
+</config>
