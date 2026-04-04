@@ -1,0 +1,60 @@
+# This runs automatically when a PR is merged to main.
+# You don't trigger it. GitHub does.
+#
+# What it does:
+#   1. Figures out which devices were affected by the merge
+#   2. Deploys the rendered config to those devices
+#   3. Validates the devices match expected state
+#
+# Credentials come from GitHub Secrets (not the repo).
+
+name: Deploy to Devices
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "rendered/**"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2    # Need previous commit to detect what changed
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install jinja2 pyyaml
+
+      # Figure out which devices had config changes
+      - name: Detect affected devices
+        id: detect
+        run: |
+          devices=$(git diff --name-only HEAD~1 HEAD -- rendered/ | cut -d/ -f2 | sort -u)
+          echo "devices=$devices" >> $GITHUB_OUTPUT
+          echo "Affected devices: $devices"
+
+      # Deploy to each affected device
+      - name: Deploy
+        env:
+          # In production these come from GitHub Secrets
+          # not from inventory.yaml
+          DEVICE_USERNAME: ${{ secrets.DEVICE_USERNAME }}
+          DEVICE_PASSWORD: ${{ secrets.DEVICE_PASSWORD }}
+        run: |
+          for device in ${{ steps.detect.outputs.devices }}; do
+            echo "Deploying to $device..."
+            python3 shim deploy "$device"
+          done
+
+      # Validate after deploy
+      - name: Validate
+        run: |
+          for device in ${{ steps.detect.outputs.devices }}; do
+            echo "Validating $device..."
+            python3 shim validate "$device"
+          done
