@@ -1,5 +1,7 @@
-# Runs automatically when configs/ changes on main (PR merged or direct push).
-# Deploys all affected devices in parallel with atomic rollback.
+# Runs automatically when configs/ changes on main.
+# Checks if the changed devices belong to a service deployment.
+# If yes: uses the service's atomic/parallel settings.
+# If no: deploys independently (no rollback between devices).
 
 name: Deploy to Devices
 
@@ -21,16 +23,49 @@ jobs:
         with:
           fetch-depth: 2
 
-      - name: Detect changed devices
-        id: detect
+      - name: Detect and deploy
         run: |
-          devices=$(git diff --name-only HEAD~1 HEAD -- configs/ \
+          # Find which devices changed
+          changed=$(git diff --name-only HEAD~1 HEAD -- configs/ \
             | sed 's|configs/||;s|\.json||' \
-            | sort -u \
-            | tr '\n' ' ')
-          echo "devices=$devices"
-          echo "devices=$devices" >> $GITHUB_OUTPUT
+            | sort -u)
 
-      - name: Deploy
-        if: steps.detect.outputs.devices != ''
-        run: python3 shim deploy ${{ steps.detect.outputs.devices }}
+          echo "Changed devices: $changed"
+
+          # Check if any service deployment covers these devices
+          deployed_devices=""
+          for service_file in deploys/*.yaml; do
+            [ -f "$service_file" ] || continue
+
+            service_name=$(basename "$service_file" .yaml)
+            service_devices=$(python3 -c "
+          import yaml
+          s = yaml.safe_load(open('$service_file'))
+          print(' '.join(s.get('devices', [])))
+          ")
+
+            # Check if any changed device is in this service
+            match=false
+            for device in $changed; do
+              if echo "$service_devices" | grep -qw "$device"; then
+                match=true
+                break
+              fi
+            done
+
+            if [ "$match" = true ]; then
+              echo ""
+              echo "=== Service: $service_name ==="
+              python3 shim service-deploy "$service_name"
+              deployed_devices="$deployed_devices $service_devices"
+            fi
+          done
+
+          # Deploy remaining devices that aren't part of any service
+          for device in $changed; do
+            if ! echo "$deployed_devices" | grep -qw "$device"; then
+              echo ""
+              echo "=== Independent: $device ==="
+              python3 shim push "$device"
+            fi
+          done

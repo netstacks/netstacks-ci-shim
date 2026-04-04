@@ -1,0 +1,19 @@
+# Baseline deployment: NTP across all devices
+# Independent — each device can succeed or fail on its own.
+
+name: baseline-ntp
+description: NTP server standardization across all EOS devices
+
+atomic: false      # Best effort — don't roll back others if one fails
+workers: 10        # Push all at once
+
+devices:
+  - rr1-nyc
+  - p1-nyc
+  - p2-chi
+  - p3-ams
+  - pe1-nyc
+  - pe2-nyc
+  - pe3-chi
+  - pe4-dal
+  - sw1-chi-techcorp

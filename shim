@@ -28,6 +28,7 @@ INVENTORY_FILE = REPO_ROOT / "inventory.yaml"
 CONFIGS_DIR = REPO_ROOT / "configs"
 LIBRARY_DIR = REPO_ROOT / "library"
 DRIVERS_DIR = REPO_ROOT / "drivers"
+DEPLOYS_DIR = REPO_ROOT / "deploys"
 
 
 # ---------------------------------------------------------------------------
@@ -294,6 +295,54 @@ def cmd_deploy(args):
     else:
         print(f"DEPLOY SUCCEEDED — {len(succeeded)} devices updated.")
         return 0
+
+
+def cmd_service_deploy(args):
+    """Deploy using a service definition from deploys/."""
+    service_name = args.service
+    service_path = DEPLOYS_DIR / f"{service_name}.yaml"
+
+    if not service_path.exists():
+        # List available services
+        print(f"Service '{service_name}' not found.")
+        if DEPLOYS_DIR.exists():
+            available = [f.stem for f in DEPLOYS_DIR.glob("*.yaml")]
+            if available:
+                print(f"Available: {', '.join(available)}")
+        return 1
+
+    service = yaml.safe_load(open(service_path))
+    print(f"Service: {service.get('name', service_name)}")
+    print(f"Description: {service.get('description', '')}")
+    print()
+
+    # Build args for cmd_deploy
+    class DeployArgs:
+        pass
+
+    deploy_args = DeployArgs()
+    deploy_args.devices = service["devices"]
+    deploy_args.workers = service.get("workers", 10)
+    deploy_args.no_atomic = not service.get("atomic", True)
+
+    return cmd_deploy(deploy_args)
+
+
+def cmd_service_list(args):
+    """List available service deployments."""
+    if not DEPLOYS_DIR.exists():
+        print("No service deployments defined. Create YAML files in deploys/")
+        return
+
+    print(f"{'Service':<25} {'Atomic':<10} {'Devices':<8} Description")
+    print("-" * 80)
+    for f in sorted(DEPLOYS_DIR.glob("*.yaml")):
+        service = yaml.safe_load(open(f))
+        name = service.get("name", f.stem)
+        atomic = "yes" if service.get("atomic", True) else "no"
+        devices = len(service.get("devices", []))
+        desc = service.get("description", "")
+        print(f"{name:<25} {atomic:<10} {devices:<8} {desc}")
 
 
 def cmd_diff(args):
@@ -683,6 +732,11 @@ def main():
     p.add_argument("--workers", type=int, default=10, help="Parallel workers (default: 10)")
     p.add_argument("--no-atomic", action="store_true", help="Skip rollback on failure")
 
+    p = sub.add_parser("service-deploy", help="Deploy a named service (from deploys/)")
+    p.add_argument("service", help="Service name (e.g. l3vpn-cust-a)")
+
+    sub.add_parser("service-list", help="List available service deployments")
+
     p = sub.add_parser("diff", help="Compare config file vs live device")
     p.add_argument("device", help="Device name from inventory")
 
@@ -717,6 +771,8 @@ def main():
         "pull": cmd_pull,
         "push": cmd_push,
         "deploy": cmd_deploy,
+        "service-deploy": cmd_service_deploy,
+        "service-list": cmd_service_list,
         "diff": cmd_diff,
         "validate": cmd_validate,
         "show": cmd_show,

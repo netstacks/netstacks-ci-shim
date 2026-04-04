@@ -1,0 +1,13 @@
+# Service deployment: L3VPN for Customer A
+# All devices must succeed or all get rolled back.
+
+name: l3vpn-cust-a
+description: L3VPN service for Customer A (PE1 + PE2 + CE1)
+
+atomic: true       # All or nothing — if one fails, roll back all
+workers: 3         # Push to all 3 in parallel
+
+devices:
+  - pe1-nyc
+  - pe2-nyc
+  - ce1-nyc-globalbank
