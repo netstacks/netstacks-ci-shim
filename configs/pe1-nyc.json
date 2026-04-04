@@ -1,0 +1,3860 @@
+{
+  "openconfig-acl:acl": {
+    "acl-sets": {
+      "acl-set": []
+    }
+  },
+  "arista-exp-eos:arista": {
+    "eos": {
+      "arista-exp-eos-mlag:mlag": {
+        "config": {
+          "dual-primary-action": "action-none",
+          "reload-delay-mlag-configured": false
+        }
+      },
+      "arista-exp-eos-qos:qos": {
+        "arista-exp-eos-qos-acl-config:acl": {
+          "input": {
+            "cli": {
+              "cmapType": [
+                {
+                  "cmap": [
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-acllog"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-acllog-sflow"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-arp"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-arp-inspect"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-arpresolver"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-bfd"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-bfd-ptp"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-bgp"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-bpdu"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-cfm"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-cfm-snoop"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-clb-snoop"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-cvx"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-cvx-heartbeat"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-default-snoop"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-dmf"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-dot1x-eapol-data"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-dot1x-mba"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-dot1x-vxlan"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-drop"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-eapol"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-ecf-high"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-ecf-low"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-ecf-med"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-egress-acllog"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-ftr"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-glean"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-icf"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-igmp"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-ipbroadcast"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-iplocking"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-ipmc"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-ipmcmiss"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-ipmcrsvd"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-ipunicast"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-ipv6nd"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-l2broadcast"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-l2forward-includes-cpu"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-l2rsvd"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-l2ucast"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-l3-exception"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-l3-high-pri"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-l3-low-pri"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-l3destmiss"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-l3lpmoverflow"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-l3rsvd"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-l3slowpath"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-l3ttl0"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-l3ttl1"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-lacp"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-ldp"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-linklocal"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-linklocal-src"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-lldp"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-mac-learn"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-mcast"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-mirroring"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-mlag"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-mod"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-mpls-arp-suppress"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-mpls-label-miss"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-mpls-ttl01"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-mtu"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-multicastsnoop"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-mvrp"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-nat"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-OspfIsis"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-pim"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-PimPtp"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-protocol-snoop"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-ptp"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-ptp-snoop"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-rsvp"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-selfip"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-selfip-tc6to7"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-sflow"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-tc3to5"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-tc6to7"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-unicastarp"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-vrrp"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-vxlan-encapsulation"
+                    },
+                    {
+                      "matchCondition": "matchConditionAny",
+                      "name": "copp-system-vxlan-vtep-learn"
+                    }
+                  ],
+                  "type": "mapControlPlane"
+                },
+                {
+                  "cmap": [
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "arp"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "arp"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "arp-needed"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "arp-needed"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "bfd"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "bfd"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "bpdu"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "bpdu"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "cfm"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "cfm"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "cvx"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "cvx"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "dhcp"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "dhcp"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "dot1xMBA"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "dot1xMBA"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "igmp"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "igmp"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "ip-broadcast"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "ip-broadcast"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "ipv6-nd"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "ipv6-nd"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "isis"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "isis"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "lacp"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "lacp"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "layer2-broadcast"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "layer2-broadcast"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "layer2-control"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "layer2-control"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "layer3-control"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "layer3-control"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "layer3-slow-path"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "layer3-slow-path"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "link-local-multicast"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "link-local-multicast"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "lldp"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "lldp"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "mac-source-miss"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "mac-source-miss"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "mlag-control"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "mlag-control"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "mlag-control-heartbeat"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "mlag-control-heartbeat"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "mpls-route-miss"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "mpls-route-miss"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "mstp"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "mstp"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "multicast-route-miss"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "multicast-route-miss"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "mvrp"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "mvrp"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "nat-miss"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "nat-miss"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "natTcpFlags"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "natTcpFlags"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "ospf"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "ospf"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "pim"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "pim"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "ptp"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "ptp"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "pvst"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "pvst"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "routed-ip-options"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "routed-ip-options"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "self-bgp"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "self-bgp"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "self-icmp"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "self-icmp"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "self-ip-all"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "self-ip-all"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "self-ip-high-priority"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "self-ip-high-priority"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "self-ip-low-priority"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "self-ip-low-priority"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "ttl-exception"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "ttl-exception"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "unicast-route-miss"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "unicast-route-miss"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "unicast-route-overflow"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "unicast-route-overflow"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "unicast-rpf-failure"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "unicast-rpf-failure"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "vrrp"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "vrrp"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "vxlan-encapsulation"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "vxlan-encapsulation"
+                    },
+                    {
+                      "match": [
+                        {
+                          "option": "matchBuiltIn",
+                          "strValue": "vxlan-vtep-learn"
+                        }
+                      ],
+                      "matchCondition": "matchConditionAny",
+                      "name": "vxlan-vtep-learn"
+                    }
+                  ],
+                  "type": "mapPdp"
+                },
+                {
+                  "type": "mapQos"
+                }
+              ],
+              "pmapType": [
+                {
+                  "pmap": [
+                    {
+                      "classAction": [
+                        {
+                          "name": "copp-system-acllog",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-acllog-sflow",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-arp",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-arp-inspect",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-arpresolver",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-bfd",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-bfd-ptp",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-bgp",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-bpdu",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-cfm",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-cfm-snoop",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-clb-snoop",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-cvx",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-cvx-heartbeat",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-default-snoop",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-dmf",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-dot1x-eapol-data",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-dot1x-mba",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-dot1x-vxlan",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-drop",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-eapol",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-ecf-high",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-ecf-low",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-ecf-med",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-egress-acllog",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-ftr",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-glean",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-icf",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-igmp",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-ipbroadcast",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-iplocking",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-ipmc",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-ipmcmiss",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-ipmcrsvd",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-ipunicast",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-ipv6nd",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-l2broadcast",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-l2forward-includes-cpu",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-l2rsvd",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-l2ucast",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-l3-exception",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-l3-high-pri",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-l3-low-pri",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-l3destmiss",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-l3lpmoverflow",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-l3rsvd",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-l3slowpath",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-l3ttl0",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-l3ttl1",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-lacp",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-ldp",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-linklocal",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-linklocal-src",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-lldp",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-mac-learn",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-mcast",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-mirroring",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-mlag",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-mod",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-mpls-arp-suppress",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-mpls-label-miss",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-mpls-ttl01",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-mtu",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-multicastsnoop",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-mvrp",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-nat",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-OspfIsis",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-pim",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-PimPtp",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-protocol-snoop",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-ptp",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-ptp-snoop",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-rsvp",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-selfip",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-selfip-tc6to7",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-sflow",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-tc3to5",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-tc6to7",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-unicastarp",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-vrrp",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-vxlan-encapsulation",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        },
+                        {
+                          "name": "copp-system-vxlan-vtep-learn",
+                          "policyAction": [
+                            {
+                              "actionType": "actionSetBandwidth",
+                              "value": 0
+                            },
+                            {
+                              "actionType": "actionSetShape",
+                              "value": 0
+                            }
+                          ]
+                        }
+                      ],
+                      "classActionDefault": {
+                        "name": "copp-system-default",
+                        "policyAction": [
+                          {
+                            "actionType": "actionSetBandwidth",
+                            "value": 0
+                          },
+                          {
+                            "actionType": "actionSetShape",
+                            "value": 0
+                          }
+                        ]
+                      },
+                      "classDefault": {
+                        "match": [
+                          {
+                            "option": "matchIpAccessGroup"
+                          }
+                        ]
+                      },
+                      "coppStaticClassPrio": [
+                        {
+                          "index": 1
+                        },
+                        {
+                          "index": 2
+                        },
+                        {
+                          "index": 3
+                        },
+                        {
+                          "index": 4
+                        },
+                        {
+                          "index": 5
+                        },
+                        {
+                          "index": 6
+                        },
+                        {
+                          "index": 7
+                        },
+                        {
+                          "index": 8
+                        },
+                        {
+                          "index": 9
+                        },
+                        {
+                          "index": 10
+                        },
+                        {
+                          "index": 11
+                        },
+                        {
+                          "index": 12
+                        },
+                        {
+                          "index": 13
+                        },
+                        {
+                          "index": 14
+                        },
+                        {
+                          "index": 15
+                        },
+                        {
+                          "index": 16
+                        },
+                        {
+                          "index": 17
+                        },
+                        {
+                          "index": 18
+                        },
+                        {
+                          "index": 19
+                        },
+                        {
+                          "index": 20
+                        },
+                        {
+                          "index": 21
+                        },
+                        {
+                          "index": 22
+                        },
+                        {
+                          "index": 23
+                        },
+                        {
+                          "index": 24
+                        },
+                        {
+                          "index": 25
+                        },
+                        {
+                          "index": 26
+                        },
+                        {
+                          "index": 27
+                        },
+                        {
+                          "index": 28
+                        },
+                        {
+                          "index": 29
+                        },
+                        {
+                          "index": 30
+                        },
+                        {
+                          "index": 31
+                        },
+                        {
+                          "index": 32
+                        },
+                        {
+                          "index": 33
+                        },
+                        {
+                          "index": 34
+                        },
+                        {
+                          "index": 35
+                        },
+                        {
+                          "index": 36
+                        },
+                        {
+                          "index": 37
+                        },
+                        {
+                          "index": 38
+                        },
+                        {
+                          "index": 39
+                        },
+                        {
+                          "index": 40
+                        },
+                        {
+                          "index": 41
+                        },
+                        {
+                          "index": 42
+                        },
+                        {
+                          "index": 43
+                        },
+                        {
+                          "index": 44
+                        },
+                        {
+                          "index": 45
+                        },
+                        {
+                          "index": 46
+                        },
+                        {
+                          "index": 47
+                        },
+                        {
+                          "index": 48
+                        },
+                        {
+                          "index": 49
+                        },
+                        {
+                          "index": 50
+                        },
+                        {
+                          "index": 51
+                        },
+                        {
+                          "index": 52
+                        },
+                        {
+                          "index": 53
+                        },
+                        {
+                          "index": 54
+                        },
+                        {
+                          "index": 55
+                        },
+                        {
+                          "index": 56
+                        },
+                        {
+                          "index": 57
+                        },
+                        {
+                          "index": 58
+                        },
+                        {
+                          "index": 59
+                        },
+                        {
+                          "index": 60
+                        },
+                        {
+                          "index": 61
+                        },
+                        {
+                          "index": 62
+                        },
+                        {
+                          "index": 63
+                        },
+                        {
+                          "index": 64
+                        },
+                        {
+                          "index": 65
+                        },
+                        {
+                          "index": 66
+                        },
+                        {
+                          "index": 67
+                        },
+                        {
+                          "index": 68
+                        },
+                        {
+                          "index": 69
+                        },
+                        {
+                          "index": 70
+                        },
+                        {
+                          "index": 71
+                        },
+                        {
+                          "index": 72
+                        },
+                        {
+                          "index": 73
+                        },
+                        {
+                          "index": 74
+                        },
+                        {
+                          "index": 75
+                        },
+                        {
+                          "index": 76
+                        },
+                        {
+                          "index": 77
+                        },
+                        {
+                          "index": 78
+                        },
+                        {
+                          "index": 79
+                        },
+                        {
+                          "index": 80
+                        },
+                        {
+                          "index": 81
+                        },
+                        {
+                          "index": 82
+                        }
+                      ],
+                      "name": "copp-system-policy"
+                    }
+                  ],
+                  "type": "mapControlPlane"
+                },
+                {
+                  "type": "mapPdp"
+                },
+                {
+                  "type": "mapQos"
+                }
+              ]
+            }
+          }
+        },
+        "arista-exp-eos-qos-config:input": {
+          "config": {
+            "cli": {
+              "servicePolicyConfig": [
+                {
+                  "key-direction": "input",
+                  "key-pmapName": "copp-system-policy",
+                  "key-type": "mapControlPlane"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "arista-exp-eos-multicast:routing": {
+        "multicast": {
+          "routeconfig": {
+            "static": {
+              "vrfConfig": [
+                {
+                  "vrfName": "default"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "arista-mirroring-tap-agg-common:tap-aggregation": {
+      "arista-mirroring-mirroring-open-config:config": {
+        "mode": "MODE_NONE",
+        "tcam-profile": ""
+      }
+    }
+  },
+  "openconfig-bfd:bfd": {
+    "arista-bfd-augments:config": {
+      "enabled": true
+    }
+  },
+  "arista-gnoi-cert:certificates": {
+    "certificate": [
+      {
+        "certificate-id": "ARISTA_DEFAULT_PROFILE",
+        "config": {
+          "certificate-id": "ARISTA_DEFAULT_PROFILE"
+        },
+        "status": {
+          "not-after": 0,
+          "not-before": 0,
+          "pem-certificate": ""
+        }
+      }
+    ]
+  },
+  "openconfig-platform:components": {
+    "component": [
+      {
+        "name": "Aaa"
+      },
+      {
+        "config": {
+          "name": "Aboot"
+        },
+        "name": "Aboot"
+      },
+      {
+        "name": "Acl"
+      },
+      {
+        "name": "AgentMonitor"
+      },
+      {
+        "name": "AirStream"
+      },
+      {
+        "name": "ArfaAegis"
+      },
+      {
+        "name": "ArfaState"
+      },
+      {
+        "name": "Arp"
+      },
+      {
+        "name": "Bfd"
+      },
+      {
+        "name": "Bgp"
+      },
+      {
+        "name": "BgpCliHelper"
+      },
+      {
+        "config": {
+          "name": "BIOS"
+        },
+        "name": "BIOS"
+      },
+      {
+        "name": "CapiApp"
+      },
+      {
+        "config": {
+          "name": "Chassis"
+        },
+        "name": "Chassis",
+        "subcomponents": {
+          "subcomponent": [
+            {
+              "config": {
+                "name": "Aboot"
+              },
+              "name": "Aboot"
+            },
+            {
+              "config": {
+                "name": "BIOS"
+              },
+              "name": "BIOS"
+            },
+            {
+              "config": {
+                "name": "CPU0"
+              },
+              "name": "CPU0"
+            },
+            {
+              "config": {
+                "name": "CPU1"
+              },
+              "name": "CPU1"
+            },
+            {
+              "config": {
+                "name": "CPU2"
+              },
+              "name": "CPU2"
+            },
+            {
+              "config": {
+                "name": "CPU3"
+              },
+              "name": "CPU3"
+            },
+            {
+              "config": {
+                "name": "CPU4"
+              },
+              "name": "CPU4"
+            },
+            {
+              "config": {
+                "name": "CPU5"
+              },
+              "name": "CPU5"
+            },
+            {
+              "config": {
+                "name": "CPU6"
+              },
+              "name": "CPU6"
+            },
+            {
+              "config": {
+                "name": "CPU7"
+              },
+              "name": "CPU7"
+            },
+            {
+              "config": {
+                "name": "CPU8"
+              },
+              "name": "CPU8"
+            },
+            {
+              "config": {
+                "name": "CPU9"
+              },
+              "name": "CPU9"
+            },
+            {
+              "config": {
+                "name": "CPU10"
+              },
+              "name": "CPU10"
+            },
+            {
+              "config": {
+                "name": "CPU11"
+              },
+              "name": "CPU11"
+            },
+            {
+              "config": {
+                "name": "EOS"
+              },
+              "name": "EOS"
+            },
+            {
+              "config": {
+                "name": "SwitchChip11000"
+              },
+              "name": "SwitchChip11000"
+            }
+          ]
+        }
+      },
+      {
+        "config": {
+          "name": "chassis-hostName"
+        },
+        "name": "chassis-hostName"
+      },
+      {
+        "name": "ConfigAgent"
+      },
+      {
+        "name": "ConnectedRoute"
+      },
+      {
+        "config": {
+          "name": "CPU0"
+        },
+        "name": "CPU0"
+      },
+      {
+        "config": {
+          "name": "CPU1"
+        },
+        "name": "CPU1"
+      },
+      {
+        "config": {
+          "name": "CPU2"
+        },
+        "name": "CPU2"
+      },
+      {
+        "config": {
+          "name": "CPU3"
+        },
+        "name": "CPU3"
+      },
+      {
+        "config": {
+          "name": "CPU4"
+        },
+        "name": "CPU4"
+      },
+      {
+        "config": {
+          "name": "CPU5"
+        },
+        "name": "CPU5"
+      },
+      {
+        "config": {
+          "name": "CPU6"
+        },
+        "name": "CPU6"
+      },
+      {
+        "config": {
+          "name": "CPU7"
+        },
+        "name": "CPU7"
+      },
+      {
+        "config": {
+          "name": "CPU8"
+        },
+        "name": "CPU8"
+      },
+      {
+        "config": {
+          "name": "CPU9"
+        },
+        "name": "CPU9"
+      },
+      {
+        "config": {
+          "name": "CPU10"
+        },
+        "name": "CPU10"
+      },
+      {
+        "config": {
+          "name": "CPU11"
+        },
+        "name": "CPU11"
+      },
+      {
+        "name": "Dot1x"
+      },
+      {
+        "name": "Ebra"
+      },
+      {
+        "config": {
+          "name": "EOS"
+        },
+        "name": "EOS"
+      },
+      {
+        "name": "Etba"
+      },
+      {
+        "config": {
+          "name": "Ethernet1"
+        },
+        "name": "Ethernet1"
+      },
+      {
+        "config": {
+          "name": "Ethernet1-Port"
+        },
+        "name": "Ethernet1-Port",
+        "subcomponents": {
+          "subcomponent": [
+            {
+              "config": {
+                "name": "Ethernet1"
+              },
+              "name": "Ethernet1"
+            }
+          ]
+        }
+      },
+      {
+        "config": {
+          "name": "Ethernet2"
+        },
+        "name": "Ethernet2"
+      },
+      {
+        "config": {
+          "name": "Ethernet2-Port"
+        },
+        "name": "Ethernet2-Port",
+        "subcomponents": {
+          "subcomponent": [
+            {
+              "config": {
+                "name": "Ethernet2"
+              },
+              "name": "Ethernet2"
+            }
+          ]
+        }
+      },
+      {
+        "name": "EventMgr"
+      },
+      {
+        "name": "FibServices"
+      },
+      {
+        "name": "Fru"
+      },
+      {
+        "name": "IgmpSnooping"
+      },
+      {
+        "name": "IpRib"
+      },
+      {
+        "name": "Ira"
+      },
+      {
+        "name": "Isis"
+      },
+      {
+        "name": "KernelFib"
+      },
+      {
+        "name": "KernelNetworkInfo"
+      },
+      {
+        "name": "L1OpenConfig"
+      },
+      {
+        "name": "L2Rib"
+      },
+      {
+        "name": "LacpTxAgent"
+      },
+      {
+        "name": "Lag"
+      },
+      {
+        "name": "Launcher"
+      },
+      {
+        "name": "Lldp"
+      },
+      {
+        "name": "McastCommon"
+      },
+      {
+        "name": "McastCommon6"
+      },
+      {
+        "name": "Mpls"
+      },
+      {
+        "name": "MplsEtba"
+      },
+      {
+        "name": "MplsUtilLsp"
+      },
+      {
+        "name": "OpenConfig"
+      },
+      {
+        "name": "PerfMonitor"
+      },
+      {
+        "name": "PhyEthtool-1"
+      },
+      {
+        "name": "PortSec"
+      },
+      {
+        "name": "PowerFuse"
+      },
+      {
+        "name": "ProcLauncher-1"
+      },
+      {
+        "name": "Qos"
+      },
+      {
+        "name": "rbfdu"
+      },
+      {
+        "name": "ReloadCauseAgent"
+      },
+      {
+        "name": "RouteCache"
+      },
+      {
+        "name": "RouteInput"
+      },
+      {
+        "name": "SharedSecretProfile"
+      },
+      {
+        "name": "Snmp"
+      },
+      {
+        "name": "StageMgr"
+      },
+      {
+        "name": "StandbyCpld"
+      },
+      {
+        "name": "Stp"
+      },
+      {
+        "name": "StpTopology"
+      },
+      {
+        "name": "StpTxRx"
+      },
+      {
+        "name": "SuperServer"
+      },
+      {
+        "config": {
+          "name": "SwitchChip11000"
+        },
+        "name": "SwitchChip11000",
+        "subcomponents": {
+          "subcomponent": [
+            {
+              "config": {
+                "name": "Ethernet1-Port"
+              },
+              "name": "Ethernet1-Port"
+            },
+            {
+              "config": {
+                "name": "Ethernet2-Port"
+              },
+              "name": "Ethernet2-Port"
+            }
+          ]
+        }
+      },
+      {
+        "name": "Sysdb"
+      },
+      {
+        "name": "Thermostat"
+      },
+      {
+        "name": "TopoAgent"
+      },
+      {
+        "name": "Tunnel"
+      },
+      {
+        "name": "XcvrCentralAgent"
+      }
+    ]
+  },
+  "openconfig-interfaces:interfaces": {
+    "interface": [
+      {
+        "config": {
+          "description": "to P1-NYC",
+          "mtu": 0,
+          "name": "Ethernet1",
+          "type": "iana-if-type:ethernetCsmacd"
+        },
+        "openconfig-if-ethernet:ethernet": {
+          "config": {
+            "arista-intf-augments:fec-encoding": {
+              "disabled": false,
+              "fire-code": false,
+              "reed-solomon": false,
+              "reed-solomon544": false
+            },
+            "mac-address": "00:00:00:00:00:00",
+            "port-speed": "SPEED_UNKNOWN",
+            "arista-intf-augments:sfp-1000base-t": false
+          },
+          "arista-ebra-octap-agg-port-config:tap-aggregation": {
+            "config": {
+              "interface-mode": "NON_TAP_TOOL"
+            },
+            "name": "Ethernet1"
+          }
+        },
+        "name": "Ethernet1",
+        "subinterfaces": {
+          "subinterface": [
+            {
+              "config": {
+                "description": "to P1-NYC"
+              },
+              "index": 0,
+              "openconfig-if-ip:ipv4": {
+                "addresses": {
+                  "address": [
+                    {
+                      "config": {
+                        "ip": "10.0.10.2",
+                        "prefix-length": 30
+                      },
+                      "ip": "10.0.10.2"
+                    }
+                  ]
+                },
+                "config": {
+                  "enabled": true
+                },
+                "neighbors": {
+                  "neighbor": [
+                    {
+                      "config": {
+                        "ip": "10.0.10.1"
+                      },
+                      "ip": "10.0.10.1"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "config": {
+          "description": "to CE1-NYC-GLOBALBANK",
+          "mtu": 0,
+          "name": "Ethernet2",
+          "type": "iana-if-type:ethernetCsmacd"
+        },
+        "openconfig-if-ethernet:ethernet": {
+          "config": {
+            "arista-intf-augments:fec-encoding": {
+              "disabled": false,
+              "fire-code": false,
+              "reed-solomon": false,
+              "reed-solomon544": false
+            },
+            "mac-address": "00:00:00:00:00:00",
+            "port-speed": "SPEED_UNKNOWN",
+            "arista-intf-augments:sfp-1000base-t": false
+          },
+          "arista-ebra-octap-agg-port-config:tap-aggregation": {
+            "config": {
+              "interface-mode": "NON_TAP_TOOL"
+            },
+            "name": "Ethernet2"
+          }
+        },
+        "name": "Ethernet2",
+        "subinterfaces": {
+          "subinterface": [
+            {
+              "config": {
+                "description": "to CE1-NYC-GLOBALBANK"
+              },
+              "index": 0,
+              "openconfig-if-ip:ipv4": {
+                "addresses": {
+                  "address": [
+                    {
+                      "config": {
+                        "ip": "192.168.1.1",
+                        "prefix-length": 30
+                      },
+                      "ip": "192.168.1.1"
+                    }
+                  ]
+                },
+                "config": {
+                  "enabled": true
+                },
+                "neighbors": {
+                  "neighbor": [
+                    {
+                      "config": {
+                        "ip": "192.168.1.2"
+                      },
+                      "ip": "192.168.1.2"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "config": {
+          "description": "Management Loopback",
+          "loopback-mode": "FACILITY",
+          "name": "Loopback0",
+          "type": "iana-if-type:softwareLoopback"
+        },
+        "name": "Loopback0",
+        "subinterfaces": {
+          "subinterface": [
+            {
+              "config": {
+                "description": "Management Loopback"
+              },
+              "index": 0,
+              "openconfig-if-ip:ipv4": {
+                "addresses": {
+                  "address": [
+                    {
+                      "config": {
+                        "ip": "10.255.0.14",
+                        "prefix-length": 32
+                      },
+                      "ip": "10.255.0.14"
+                    }
+                  ]
+                },
+                "config": {
+                  "enabled": true
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "config": {
+          "mtu": 0,
+          "name": "Management0",
+          "type": "iana-if-type:ethernetCsmacd"
+        },
+        "openconfig-if-ethernet:ethernet": {
+          "config": {
+            "arista-intf-augments:fec-encoding": {
+              "disabled": false,
+              "fire-code": false,
+              "reed-solomon": false,
+              "reed-solomon544": false
+            },
+            "mac-address": "00:00:00:00:00:00",
+            "port-speed": "SPEED_UNKNOWN",
+            "arista-intf-augments:sfp-1000base-t": false
+          }
+        },
+        "name": "Management0",
+        "subinterfaces": {
+          "subinterface": [
+            {
+              "index": 0,
+              "openconfig-if-ip:ipv4": {
+                "addresses": {
+                  "address": [
+                    {
+                      "config": {
+                        "ip": "10.1.1.104",
+                        "prefix-length": 24
+                      },
+                      "ip": "10.1.1.104"
+                    }
+                  ]
+                },
+                "neighbors": {
+                  "neighbor": [
+                    {
+                      "config": {
+                        "ip": "10.1.1.1"
+                      },
+                      "ip": "10.1.1.1"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "openconfig-lldp:lldp": {
+    "config": {
+      "hello-timer": "30",
+      "arista-lldp-augments:management-address": {
+        "interface": "",
+        "network-instance": "default",
+        "transmit-mode": "BEST"
+      },
+      "system-description": "Arista Networks EOS version 4.35.0F-44178984.4350F (engineering build) running on an Arista cEOSLab",
+      "system-name": "PE1-NYC"
+    },
+    "interfaces": {
+      "interface": [
+        {
+          "config": {
+            "name": "Ethernet1"
+          },
+          "name": "Ethernet1"
+        },
+        {
+          "config": {
+            "name": "Ethernet2"
+          },
+          "name": "Ethernet2"
+        },
+        {
+          "config": {
+            "name": "Management0"
+          },
+          "name": "Management0"
+        }
+      ]
+    }
+  },
+  "openconfig-network-instance:network-instances": {
+    "network-instance": [
+      {
+        "config": {
+          "arista-netinst-augments:ipv6-routing-enabled": false,
+          "name": "default",
+          "type": "openconfig-network-instance-types:DEFAULT_INSTANCE"
+        },
+        "mpls": {
+          "global": {
+            "config": {
+              "arista-mpls-augments:enabled": true
+            },
+            "reserved-label-blocks": {
+              "reserved-label-block": [
+                {
+                  "config": {
+                    "local-id": "bgp-sr",
+                    "lower-bound": 900000,
+                    "upper-bound": 965535
+                  },
+                  "local-id": "bgp-sr"
+                },
+                {
+                  "config": {
+                    "local-id": "dynamic",
+                    "lower-bound": 100000,
+                    "upper-bound": 362143
+                  },
+                  "local-id": "dynamic"
+                },
+                {
+                  "config": {
+                    "local-id": "isis-sr",
+                    "lower-bound": 900000,
+                    "upper-bound": 965535
+                  },
+                  "local-id": "isis-sr"
+                },
+                {
+                  "config": {
+                    "local-id": "l2evpn",
+                    "lower-bound": 1036288,
+                    "upper-bound": 1048575
+                  },
+                  "local-id": "l2evpn"
+                },
+                {
+                  "config": {
+                    "local-id": "l2evpnSharedEs",
+                    "lower-bound": 1031072,
+                    "upper-bound": 1032095
+                  },
+                  "local-id": "l2evpnSharedEs"
+                },
+                {
+                  "config": {
+                    "local-id": "ospf-sr",
+                    "lower-bound": 900000,
+                    "upper-bound": 965535
+                  },
+                  "local-id": "ospf-sr"
+                },
+                {
+                  "config": {
+                    "local-id": "srlb",
+                    "lower-bound": 965536,
+                    "upper-bound": 1031071
+                  },
+                  "local-id": "srlb"
+                },
+                {
+                  "config": {
+                    "local-id": "static",
+                    "lower-bound": 16,
+                    "upper-bound": 99999
+                  },
+                  "local-id": "static"
+                }
+              ]
+            }
+          },
+          "signaling-protocols": {
+            "rsvp-te": {
+              "global": {
+                "hellos": {
+                  "config": {
+                    "hello-interval": 10000
+                  }
+                },
+                "soft-preemption": {
+                  "config": {
+                    "enable": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "name": "default",
+        "protocols": {
+          "protocol": [
+            {
+              "config": {
+                "identifier": "openconfig-policy-types:DIRECTLY_CONNECTED",
+                "name": "DIRECTLY_CONNECTED"
+              },
+              "identifier": "openconfig-policy-types:DIRECTLY_CONNECTED",
+              "name": "DIRECTLY_CONNECTED"
+            },
+            {
+              "arista-bfd-augments:bfd": {
+                "micro-bfd-sessions": {
+                  "micro-bfd-session": [
+                    {
+                      "member-interface": "Ethernet1"
+                    }
+                  ]
+                }
+              },
+              "config": {
+                "identifier": "arista-bfd-augments:BFD",
+                "name": "BFD"
+              },
+              "identifier": "arista-bfd-augments:BFD",
+              "name": "BFD"
+            },
+            {
+              "config": {
+                "identifier": "openconfig-policy-types:STATIC",
+                "name": "STATIC"
+              },
+              "identifier": "openconfig-policy-types:STATIC",
+              "name": "STATIC",
+              "static-routes": {
+                "static": [
+                  {
+                    "config": {
+                      "prefix": "0.0.0.0/0"
+                    },
+                    "next-hops": {
+                      "next-hop": [
+                        {
+                          "config": {
+                            "index": "AUTO_1_10-1-1-1",
+                            "metric": 0,
+                            "next-hop": "10.1.1.1",
+                            "preference": 1
+                          },
+                          "index": "AUTO_1_10-1-1-1"
+                        }
+                      ]
+                    },
+                    "prefix": "0.0.0.0/0"
+                  }
+                ]
+              }
+            },
+            {
+              "bgp": {
+                "global": {
+                  "config": {
+                    "as": 4444,
+                    "router-id": "10.255.0.14"
+                  }
+                },
+                "neighbors": {
+                  "neighbor": [
+                    {
+                      "afi-safis": {
+                        "afi-safi": [
+                          {
+                            "afi-safi-name": "arista-bgp-augments:IPV4_MULTICAST",
+                            "config": {
+                              "afi-safi-name": "arista-bgp-augments:IPV4_MULTICAST"
+                            }
+                          },
+                          {
+                            "afi-safi-name": "arista-bgp-augments:IPV6_MULTICAST",
+                            "config": {
+                              "afi-safi-name": "arista-bgp-augments:IPV6_MULTICAST"
+                            }
+                          },
+                          {
+                            "afi-safi-name": "openconfig-bgp-types:IPV4_UNICAST",
+                            "config": {
+                              "afi-safi-name": "openconfig-bgp-types:IPV4_UNICAST"
+                            }
+                          },
+                          {
+                            "afi-safi-name": "openconfig-bgp-types:IPV6_UNICAST",
+                            "config": {
+                              "afi-safi-name": "openconfig-bgp-types:IPV6_UNICAST"
+                            }
+                          },
+                          {
+                            "afi-safi-name": "openconfig-bgp-types:L2VPN_EVPN",
+                            "config": {
+                              "afi-safi-name": "openconfig-bgp-types:L2VPN_EVPN"
+                            }
+                          }
+                        ]
+                      },
+                      "config": {
+                        "neighbor-address": "10.255.0.1",
+                        "peer-group": "IBGP_RR"
+                      },
+                      "ebgp-multihop": {
+                        "config": {
+                          "multihop-ttl": 0
+                        }
+                      },
+                      "neighbor-address": "10.255.0.1"
+                    }
+                  ]
+                },
+                "peer-groups": {
+                  "peer-group": [
+                    {
+                      "afi-safis": {
+                        "afi-safi": [
+                          {
+                            "afi-safi-name": "arista-bgp-augments:IPV4_MULTICAST",
+                            "config": {
+                              "afi-safi-name": "arista-bgp-augments:IPV4_MULTICAST"
+                            }
+                          },
+                          {
+                            "afi-safi-name": "arista-bgp-augments:IPV6_MULTICAST",
+                            "config": {
+                              "afi-safi-name": "arista-bgp-augments:IPV6_MULTICAST"
+                            }
+                          },
+                          {
+                            "afi-safi-name": "openconfig-bgp-types:IPV4_UNICAST",
+                            "config": {
+                              "afi-safi-name": "openconfig-bgp-types:IPV4_UNICAST",
+                              "enabled": true
+                            }
+                          },
+                          {
+                            "afi-safi-name": "openconfig-bgp-types:IPV6_UNICAST",
+                            "config": {
+                              "afi-safi-name": "openconfig-bgp-types:IPV6_UNICAST"
+                            }
+                          },
+                          {
+                            "afi-safi-name": "openconfig-bgp-types:L2VPN_EVPN",
+                            "config": {
+                              "afi-safi-name": "openconfig-bgp-types:L2VPN_EVPN"
+                            }
+                          },
+                          {
+                            "afi-safi-name": "openconfig-bgp-types:L3VPN_IPV4_UNICAST",
+                            "config": {
+                              "afi-safi-name": "openconfig-bgp-types:L3VPN_IPV4_UNICAST",
+                              "enabled": true
+                            }
+                          }
+                        ]
+                      },
+                      "config": {
+                        "peer-as": 4444,
+                        "peer-group-name": "IBGP_RR",
+                        "send-community-type": [
+                          "EXTENDED"
+                        ]
+                      },
+                      "ebgp-multihop": {
+                        "config": {
+                          "multihop-ttl": 0
+                        }
+                      },
+                      "peer-group-name": "IBGP_RR",
+                      "transport": {
+                        "config": {
+                          "local-address": "Loopback0"
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              "config": {
+                "identifier": "openconfig-policy-types:BGP",
+                "name": "BGP"
+              },
+              "identifier": "openconfig-policy-types:BGP",
+              "name": "BGP"
+            },
+            {
+              "config": {
+                "enabled": true,
+                "identifier": "openconfig-policy-types:ISIS",
+                "name": "CORE"
+              },
+              "identifier": "openconfig-policy-types:ISIS",
+              "isis": {
+                "global": {
+                  "afi-safi": {
+                    "af": [
+                      {
+                        "afi-name": "openconfig-isis-types:IPV4",
+                        "config": {
+                          "afi-name": "openconfig-isis-types:IPV4",
+                          "enabled": true,
+                          "max-ecmp-paths": 0,
+                          "safi-name": "openconfig-isis-types:UNICAST"
+                        },
+                        "safi-name": "openconfig-isis-types:UNICAST"
+                      },
+                      {
+                        "afi-name": "openconfig-isis-types:IPV6",
+                        "config": {
+                          "afi-name": "openconfig-isis-types:IPV6",
+                          "enabled": false,
+                          "max-ecmp-paths": 0,
+                          "safi-name": "openconfig-isis-types:UNICAST"
+                        },
+                        "multi-topology": {
+                          "config": {
+                            "arista-isis-augments:enabled": false
+                          }
+                        },
+                        "safi-name": "openconfig-isis-types:UNICAST"
+                      }
+                    ]
+                  },
+                  "config": {
+                    "instance": "CORE",
+                    "level-capability": "LEVEL_2",
+                    "arista-isis-augments:maximum-sid-depth": [
+                      "BASE_MPLS_IMPOSITION"
+                    ],
+                    "net": [
+                      "49.0001.0100.2550.0014.00"
+                    ]
+                  },
+                  "graceful-restart": {
+                    "config": {
+                      "enabled": true,
+                      "helper-only": true
+                    }
+                  },
+                  "igp-shortcuts": {
+                    "afi": [
+                      {
+                        "afi-name": "openconfig-isis-types:IPV4",
+                        "config": {
+                          "afi-name": "openconfig-isis-types:IPV4",
+                          "nh-type": [
+                            "openconfig-mpls-types:PATH_SETUP_RSVP"
+                          ]
+                        }
+                      }
+                    ]
+                  },
+                  "segment-routing": {
+                    "config": {
+                      "enabled": false,
+                      "srgb": "isis-sr",
+                      "srlb": "srlb"
+                    }
+                  },
+                  "timers": {
+                    "config": {
+                      "lsp-refresh-interval": 65535
+                    }
+                  },
+                  "transport": {
+                    "config": {
+                      "lsp-mtu-size": 1492
+                    }
+                  }
+                },
+                "interfaces": {
+                  "interface": [
+                    {
+                      "config": {
+                        "circuit-type": "POINT_TO_POINT",
+                        "enabled": true,
+                        "interface-id": "Ethernet1"
+                      },
+                      "interface-id": "Ethernet1",
+                      "interface-ref": {
+                        "config": {
+                          "interface": "Ethernet1"
+                        }
+                      },
+                      "levels": {
+                        "level": [
+                          {
+                            "afi-safi": {
+                              "af": [
+                                {
+                                  "afi-name": "openconfig-isis-types:IPV4",
+                                  "config": {
+                                    "afi-name": "openconfig-isis-types:IPV4",
+                                    "safi-name": "openconfig-isis-types:UNICAST"
+                                  },
+                                  "safi-name": "openconfig-isis-types:UNICAST"
+                                },
+                                {
+                                  "afi-name": "openconfig-isis-types:IPV6",
+                                  "config": {
+                                    "afi-name": "openconfig-isis-types:IPV6",
+                                    "safi-name": "openconfig-isis-types:UNICAST"
+                                  },
+                                  "safi-name": "openconfig-isis-types:UNICAST"
+                                }
+                              ]
+                            },
+                            "config": {
+                              "enabled": true,
+                              "level-number": 1,
+                              "priority": 64
+                            },
+                            "level-number": 1,
+                            "timers": {
+                              "config": {
+                                "hello-interval": 10,
+                                "hello-multiplier": 3
+                              }
+                            }
+                          },
+                          {
+                            "afi-safi": {
+                              "af": [
+                                {
+                                  "afi-name": "openconfig-isis-types:IPV4",
+                                  "config": {
+                                    "afi-name": "openconfig-isis-types:IPV4",
+                                    "safi-name": "openconfig-isis-types:UNICAST"
+                                  },
+                                  "safi-name": "openconfig-isis-types:UNICAST"
+                                },
+                                {
+                                  "afi-name": "openconfig-isis-types:IPV6",
+                                  "config": {
+                                    "afi-name": "openconfig-isis-types:IPV6",
+                                    "safi-name": "openconfig-isis-types:UNICAST"
+                                  },
+                                  "safi-name": "openconfig-isis-types:UNICAST"
+                                }
+                              ]
+                            },
+                            "config": {
+                              "enabled": true,
+                              "level-number": 2,
+                              "priority": 64
+                            },
+                            "level-number": 2,
+                            "timers": {
+                              "config": {
+                                "hello-interval": 10,
+                                "hello-multiplier": 3
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "timers": {
+                        "config": {
+                          "lsp-pacing-interval": "33"
+                        }
+                      }
+                    }
+                  ]
+                },
+                "levels": {
+                  "level": [
+                    {
+                      "config": {
+                        "level-number": 1
+                      },
+                      "level-number": 1,
+                      "route-preference": {
+                        "config": {
+                          "external-route-preference": 115,
+                          "internal-route-preference": 115
+                        }
+                      },
+                      "traffic-engineering": {
+                        "config": {
+                          "ipv4-router-id": "0.0.0.0",
+                          "ipv6-router-id": "::"
+                        }
+                      }
+                    },
+                    {
+                      "config": {
+                        "level-number": 2
+                      },
+                      "level-number": 2,
+                      "route-preference": {
+                        "config": {
+                          "external-route-preference": 115,
+                          "internal-route-preference": 115
+                        }
+                      },
+                      "traffic-engineering": {
+                        "config": {
+                          "ipv4-router-id": "0.0.0.0",
+                          "ipv6-router-id": "::"
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              "name": "CORE"
+            }
+          ]
+        },
+        "segment-routing": {
+          "srgbs": {
+            "srgb": [
+              {
+                "config": {
+                  "dataplane-type": "MPLS",
+                  "local-id": "isis-sr",
+                  "mpls-label-blocks": [
+                    "isis-sr"
+                  ]
+                },
+                "local-id": "isis-sr"
+              },
+              {
+                "config": {
+                  "dataplane-type": "MPLS",
+                  "local-id": "ospf-sr",
+                  "mpls-label-blocks": [
+                    "ospf-sr"
+                  ]
+                },
+                "local-id": "ospf-sr"
+              }
+            ]
+          },
+          "srlbs": {
+            "srlb": [
+              {
+                "config": {
+                  "dataplane-type": "MPLS",
+                  "local-id": "srlb",
+                  "mpls-label-block": "srlb"
+                },
+                "local-id": "srlb"
+              }
+            ]
+          }
+        },
+        "tables": {
+          "table": [
+            {
+              "address-family": "openconfig-types:IPV4",
+              "config": {
+                "address-family": "openconfig-types:IPV4",
+                "protocol": "openconfig-policy-types:DIRECTLY_CONNECTED"
+              },
+              "protocol": "openconfig-policy-types:DIRECTLY_CONNECTED"
+            },
+            {
+              "address-family": "openconfig-types:IPV6",
+              "config": {
+                "address-family": "openconfig-types:IPV6",
+                "protocol": "openconfig-policy-types:DIRECTLY_CONNECTED"
+              },
+              "protocol": "openconfig-policy-types:DIRECTLY_CONNECTED"
+            },
+            {
+              "address-family": "openconfig-types:IPV4",
+              "config": {
+                "address-family": "openconfig-types:IPV4",
+                "protocol": "openconfig-policy-types:STATIC"
+              },
+              "protocol": "openconfig-policy-types:STATIC"
+            },
+            {
+              "address-family": "openconfig-types:IPV6",
+              "config": {
+                "address-family": "openconfig-types:IPV6",
+                "protocol": "openconfig-policy-types:STATIC"
+              },
+              "protocol": "openconfig-policy-types:STATIC"
+            },
+            {
+              "address-family": "openconfig-types:IPV4",
+              "config": {
+                "address-family": "openconfig-types:IPV4",
+                "protocol": "openconfig-policy-types:BGP"
+              },
+              "protocol": "openconfig-policy-types:BGP"
+            },
+            {
+              "address-family": "openconfig-types:IPV6",
+              "config": {
+                "address-family": "openconfig-types:IPV6",
+                "protocol": "openconfig-policy-types:BGP"
+              },
+              "protocol": "openconfig-policy-types:BGP"
+            },
+            {
+              "address-family": "openconfig-types:IPV4",
+              "config": {
+                "address-family": "openconfig-types:IPV4",
+                "protocol": "openconfig-policy-types:ISIS"
+              },
+              "protocol": "openconfig-policy-types:ISIS"
+            },
+            {
+              "address-family": "openconfig-types:IPV6",
+              "config": {
+                "address-family": "openconfig-types:IPV6",
+                "protocol": "openconfig-policy-types:ISIS"
+              },
+              "protocol": "openconfig-policy-types:ISIS"
+            }
+          ]
+        },
+        "vlans": {
+          "vlan": [
+            {
+              "config": {
+                "name": "default",
+                "vlan-id": 1
+              },
+              "vlan-id": 1
+            }
+          ]
+        }
+      },
+      {
+        "config": {
+          "arista-netinst-augments:ipv6-routing-enabled": false,
+          "name": "GLOBALBANK",
+          "route-distinguisher": "4444:100",
+          "type": "openconfig-network-instance-types:L3VRF"
+        },
+        "interfaces": {
+          "interface": [
+            {
+              "config": {
+                "id": "Ethernet2",
+                "interface": "Ethernet2",
+                "subinterface": 0
+              },
+              "id": "Ethernet2"
+            }
+          ]
+        },
+        "name": "GLOBALBANK",
+        "protocols": {
+          "protocol": [
+            {
+              "config": {
+                "identifier": "openconfig-policy-types:DIRECTLY_CONNECTED",
+                "name": "DIRECTLY_CONNECTED"
+              },
+              "identifier": "openconfig-policy-types:DIRECTLY_CONNECTED",
+              "name": "DIRECTLY_CONNECTED"
+            },
+            {
+              "bgp": {
+                "global": {
+                  "arista-bgp-augments:vpn-ipv4": {
+                    "export-target": [
+                      "4444:100"
+                    ],
+                    "import-target": [
+                      "4444:100"
+                    ]
+                  }
+                },
+                "neighbors": {
+                  "neighbor": [
+                    {
+                      "afi-safis": {
+                        "afi-safi": [
+                          {
+                            "afi-safi-name": "arista-bgp-augments:IPV4_MULTICAST",
+                            "config": {
+                              "afi-safi-name": "arista-bgp-augments:IPV4_MULTICAST"
+                            }
+                          },
+                          {
+                            "afi-safi-name": "arista-bgp-augments:IPV6_MULTICAST",
+                            "config": {
+                              "afi-safi-name": "arista-bgp-augments:IPV6_MULTICAST"
+                            }
+                          },
+                          {
+                            "afi-safi-name": "openconfig-bgp-types:IPV4_UNICAST",
+                            "config": {
+                              "afi-safi-name": "openconfig-bgp-types:IPV4_UNICAST",
+                              "enabled": true
+                            }
+                          },
+                          {
+                            "afi-safi-name": "openconfig-bgp-types:IPV6_UNICAST",
+                            "config": {
+                              "afi-safi-name": "openconfig-bgp-types:IPV6_UNICAST"
+                            }
+                          },
+                          {
+                            "afi-safi-name": "openconfig-bgp-types:L2VPN_EVPN",
+                            "config": {
+                              "afi-safi-name": "openconfig-bgp-types:L2VPN_EVPN"
+                            }
+                          }
+                        ]
+                      },
+                      "config": {
+                        "neighbor-address": "192.168.1.2",
+                        "peer-as": 65001,
+                        "send-community-type": [
+                          "EXTENDED"
+                        ]
+                      },
+                      "ebgp-multihop": {
+                        "config": {
+                          "multihop-ttl": 0
+                        }
+                      },
+                      "neighbor-address": "192.168.1.2"
+                    }
+                  ]
+                }
+              },
+              "config": {
+                "identifier": "openconfig-policy-types:BGP",
+                "name": "BGP"
+              },
+              "identifier": "openconfig-policy-types:BGP",
+              "name": "BGP"
+            }
+          ]
+        },
+        "tables": {
+          "table": [
+            {
+              "address-family": "openconfig-types:IPV4",
+              "config": {
+                "address-family": "openconfig-types:IPV4",
+                "protocol": "openconfig-policy-types:DIRECTLY_CONNECTED"
+              },
+              "protocol": "openconfig-policy-types:DIRECTLY_CONNECTED"
+            },
+            {
+              "address-family": "openconfig-types:IPV6",
+              "config": {
+                "address-family": "openconfig-types:IPV6",
+                "protocol": "openconfig-policy-types:DIRECTLY_CONNECTED"
+              },
+              "protocol": "openconfig-policy-types:DIRECTLY_CONNECTED"
+            },
+            {
+              "address-family": "openconfig-types:IPV4",
+              "config": {
+                "address-family": "openconfig-types:IPV4",
+                "protocol": "openconfig-policy-types:BGP"
+              },
+              "protocol": "openconfig-policy-types:BGP"
+            },
+            {
+              "address-family": "openconfig-types:IPV6",
+              "config": {
+                "address-family": "openconfig-types:IPV6",
+                "protocol": "openconfig-policy-types:BGP"
+              },
+              "protocol": "openconfig-policy-types:BGP"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "openconfig-qos:qos": {
+    "interfaces": {
+      "interface": [
+        {
+          "config": {
+            "interface-id": "Ethernet1"
+          },
+          "interface-id": "Ethernet1"
+        },
+        {
+          "config": {
+            "interface-id": "Ethernet2"
+          },
+          "interface-id": "Ethernet2"
+        }
+      ]
+    }
+  },
+  "openconfig-spanning-tree:stp": {
+    "global": {
+      "config": {
+        "bpdu-guard": false,
+        "enabled-protocol": [
+          "openconfig-spanning-tree-types:MSTP"
+        ]
+      }
+    },
+    "mstp": {
+      "mst-instances": {
+        "mst-instance": [
+          {
+            "config": {
+              "bridge-priority": 32768,
+              "mst-id": 0,
+              "vlan": [
+                "1..4094"
+              ]
+            },
+            "mst-id": 0
+          }
+        ]
+      }
+    }
+  },
+  "openconfig-system:system": {
+    "aaa": {
+      "authentication": {
+        "admin-user": {
+          "config": {
+            "arista-system-augments:password-mode": "PASSWORD_DISABLED"
+          }
+        },
+        "config": {
+          "authentication-method": [
+            "openconfig-aaa-types:LOCAL"
+          ]
+        },
+        "users": {
+          "user": [
+            {
+              "config": {
+                "password-hashed": "$6$kxEyH2ldH1GDG0oG$t9Q26o/wNVccHCSyTvZEE.y1Sf9nBaFIvVJIeEGI.fQGSdgFsiu0e0dH786yjSvEF9gGt29muWVGOjgqoK1AX1",
+                "arista-system-augments:password-mode": "PASSWORD_REQUIRED",
+                "role": "openconfig-aaa-types:SYSTEM_ROLE_ADMIN",
+                "username": "admin"
+              },
+              "username": "admin"
+            },
+            {
+              "config": {
+                "password-hashed": "$6$k/zlTXDkR7ZDJP1d$C2Lw3YtCLAePoMuBzpyQ5PZBT3OA9Fuct3lqVl8IFPBD2vCSEOjPk8xEQhEbviAIR7aVFcelbRRqnb6dhGNZe1",
+                "arista-system-augments:password-mode": "PASSWORD_REQUIRED",
+                "role": "network-operator",
+                "username": "cwdavis"
+              },
+              "username": "cwdavis"
+            }
+          ]
+        }
+      },
+      "arista-system-augments:global": {
+        "radius": {
+          "config": {
+            "retransmit-attempts": 3,
+            "timeout": 5
+          }
+        },
+        "tacacs": {
+          "config": {
+            "timeout": 5
+          }
+        }
+      }
+    },
+    "clock": {
+      "config": {
+        "timezone-name": "UTC"
+      }
+    },
+    "config": {
+      "hostname": "PE1-NYC"
+    },
+    "openconfig-system-grpc:grpc-servers": {
+      "grpc-server": [
+        {
+          "config": {
+            "enable": true,
+            "metadata-authentication": false,
+            "name": "default",
+            "network-instance": "default",
+            "port": 6030,
+            "transport-security": false
+          },
+          "name": "default"
+        }
+      ]
+    },
+    "logging": {
+      "console": {
+        "selectors": {
+          "selector": [
+            {
+              "config": {
+                "facility": "ALL",
+                "severity": "INFORMATIONAL"
+              },
+              "facility": "ALL",
+              "severity": "INFORMATIONAL"
+            }
+          ]
+        }
+      }
+    },
+    "mac-address": {
+      "config": {
+        "routing-mac": "00:00:00:00:00:00"
+      }
+    },
+    "messages": {
+      "config": {
+        "severity": "DEBUG"
+      }
+    },
+    "arista-system-session:session": {
+      "config": {
+        "enable-config-terminal": true,
+        "enable-diff": false,
+        "max-history-size": 20
+      }
+    },
+    "ssh-server": {
+      "config": {
+        "session-limit": 50,
+        "timeout": 60
+      }
+    }
+  }
+}

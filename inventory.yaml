@@ -1,21 +1,116 @@
-# Device inventory
-# Credentials use vault:// references in production.
-# For local dev/testing, inline credentials are supported.
+# Device inventory — sourced from NetBox (192.168.50.128)
+# Credentials should use vault:// references in production.
 
 devices:
-  leaf01-eos:
-    hostname: 10.1.1.103
-    driver: eos-eapi
+  # --- Route Reflectors ---
+  rr1-nyc:
+    hostname: 10.1.1.100
+    driver: eos-gnmi
+    site: NYC-DataCenter
+    role: Route Reflector
     credential:
       username: cwdavis
       password: viperdavis69
 
-  pe1-xr:
-    hostname: 10.0.0.1
-    driver: iosxr-netconf
-    credential: vault://network/pe1-xr
+  # --- P-Routers (Core) ---
+  p1-nyc:
+    hostname: 10.1.1.101
+    driver: eos-gnmi
+    site: NYC-DataCenter
+    role: P-Router
+    credential:
+      username: cwdavis
+      password: viperdavis69
 
-  pe2-xr:
-    hostname: 10.0.0.2
-    driver: iosxr-netconf
-    credential: vault://network/pe2-xr
+  p2-chi:
+    hostname: 10.1.1.102
+    driver: eos-gnmi
+    site: CHI-DataCenter
+    role: P-Router
+    credential:
+      username: cwdavis
+      password: viperdavis69
+
+  p3-ams:
+    hostname: 10.1.1.103
+    driver: eos-gnmi
+    site: AMS-DataCenter
+    role: P-Router-Metro
+    credential:
+      username: cwdavis
+      password: viperdavis69
+
+  # --- PE-Routers (Edge) ---
+  pe1-nyc:
+    hostname: 10.1.1.104
+    driver: eos-gnmi
+    site: NYC-DataCenter
+    role: PE-Router
+    credential:
+      username: cwdavis
+      password: viperdavis69
+
+  pe2-nyc:
+    hostname: 10.1.1.105
+    driver: eos-gnmi
+    site: NYC-DataCenter
+    role: PE-Router
+    credential:
+      username: cwdavis
+      password: viperdavis69
+
+  pe3-chi:
+    hostname: 10.1.1.106
+    driver: eos-gnmi
+    site: CHI-DataCenter
+    role: PE-Router
+    credential:
+      username: cwdavis
+      password: viperdavis69
+
+  pe4-dal:
+    hostname: 10.1.1.107
+    driver: eos-gnmi
+    site: DAL-DataCenter
+    role: PE-Router
+    credential:
+      username: cwdavis
+      password: viperdavis69
+
+  # --- CE-Routers (Customer Edge, Cisco IOS — no gNMI support) ---
+  ce1-nyc-globalbank:
+    hostname: 10.1.1.110
+    driver: cisco-ios
+    site: NYC-DataCenter
+    role: CE-Router
+    credential:
+      username: cwdavis
+      password: viperdavis69
+
+  ce3-chi-techcorp:
+    hostname: 10.1.1.111
+    driver: cisco-ios
+    site: CHI-DataCenter
+    role: CE-Router
+    credential:
+      username: cwdavis
+      password: viperdavis69
+
+  # --- Customer Switches ---
+  sw1-chi-techcorp:
+    hostname: 10.1.1.120
+    driver: eos-gnmi
+    site: CHI-DataCenter
+    role: Customer-Switch
+    credential:
+      username: cwdavis
+      password: viperdavis69
+
+  sw3-lax-mediastream:
+    hostname: 10.1.1.121
+    driver: eos-gnmi
+    site: LAX-DataCenter
+    role: Customer-Switch
+    credential:
+      username: cwdavis
+      password: viperdavis69
