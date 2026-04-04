@@ -129,7 +129,7 @@ def cmd_pull(args):
 
 
 def cmd_push(args):
-    """Push configs/<device>.json to the device."""
+    """Push configs/<device>.json to a single device."""
     device_name = args.device
     device = get_device(device_name)
     config = load_config(device_name)
@@ -143,6 +143,156 @@ def cmd_push(args):
     except Exception as e:
         print(f"PUSH FAILED for {device_name}: {e}")
         return 1
+
+
+def cmd_deploy(args):
+    """Deploy config to multiple devices: parallel push with atomic rollback.
+
+    Stages:
+      1. Pre-flight: pull current config from each device (save as rollback)
+      2. Push: send new config to all devices in parallel
+      3. Validate: check all devices match expected state
+      4. Rollback: if any device failed, restore all to pre-flight state
+    """
+    import concurrent.futures
+
+    device_names = args.devices
+    if not device_names:
+        print("No devices specified.")
+        return 1
+
+    workers = min(len(device_names), args.workers)
+    atomic = not args.no_atomic
+
+    print(f"Deploy to {len(device_names)} devices (workers={workers}, atomic={atomic})")
+    print(f"  Devices: {', '.join(device_names)}")
+    print()
+
+    # --- Stage 1: Pre-flight — pull current configs as rollback snapshots ---
+    print("Stage 1: Pre-flight (saving rollback snapshots)...")
+    rollbacks = {}  # device_name -> current config from device
+    preflight_failures = []
+
+    def preflight_one(name):
+        device = get_device(name)
+        try:
+            config = gnmi_pull(device)
+            return name, config, None
+        except Exception as e:
+            return name, None, str(e)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {pool.submit(preflight_one, n): n for n in device_names}
+        for future in concurrent.futures.as_completed(futures):
+            name, config, error = future.result()
+            if error:
+                print(f"  {name}: FAILED pre-flight — {error}")
+                preflight_failures.append(name)
+            else:
+                rollbacks[name] = config
+                print(f"  {name}: OK (snapshot saved)")
+
+    if preflight_failures:
+        print(f"\nABORTED: {len(preflight_failures)} devices failed pre-flight. No changes made.")
+        return 1
+
+    print()
+
+    # --- Stage 2: Push — send new configs in parallel ---
+    print("Stage 2: Pushing configs...")
+    push_results = {}  # device_name -> (success, error)
+
+    def push_one(name):
+        device = get_device(name)
+        path = config_path(name)
+        if not path.exists():
+            return name, False, f"no config file (run: shim pull {name})"
+        with open(path) as f:
+            config = json.load(f)
+        try:
+            gnmi_push(device, config)
+            return name, True, None
+        except Exception as e:
+            return name, False, str(e)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {pool.submit(push_one, n): n for n in device_names}
+        for future in concurrent.futures.as_completed(futures):
+            name, success, error = future.result()
+            push_results[name] = (success, error)
+            if success:
+                print(f"  {name}: PUSHED")
+            else:
+                print(f"  {name}: FAILED — {error}")
+
+    failed = [n for n, (s, _) in push_results.items() if not s]
+    succeeded = [n for n, (s, _) in push_results.items() if s]
+    print()
+
+    # --- Stage 3: Validate ---
+    if succeeded:
+        print("Stage 3: Validating...")
+        validate_failures = []
+
+        def validate_one(name):
+            device = get_device(name)
+            local_config = load_config(name)
+            try:
+                live_config = gnmi_pull(device)
+                local_str = json.dumps(local_config, sort_keys=True)
+                live_str = json.dumps(live_config, sort_keys=True)
+                return name, local_str == live_str, None
+            except Exception as e:
+                return name, False, str(e)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {pool.submit(validate_one, n): n for n in succeeded}
+            for future in concurrent.futures.as_completed(futures):
+                name, valid, error = future.result()
+                if valid:
+                    print(f"  {name}: IN SYNC")
+                else:
+                    reason = error or "config mismatch"
+                    print(f"  {name}: VALIDATION FAILED — {reason}")
+                    validate_failures.append(name)
+
+        failed.extend(validate_failures)
+        print()
+
+    # --- Stage 4: Rollback if atomic and any failures ---
+    if failed and atomic:
+        print(f"Stage 4: ROLLING BACK ({len(failed)} failures, atomic mode)")
+        print(f"  Restoring all {len(device_names)} devices to pre-flight state...")
+
+        def rollback_one(name):
+            device = get_device(name)
+            try:
+                gnmi_push(device, rollbacks[name])
+                return name, True, None
+            except Exception as e:
+                return name, False, str(e)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {pool.submit(rollback_one, n): n for n in device_names}
+            for future in concurrent.futures.as_completed(futures):
+                name, success, error = future.result()
+                if success:
+                    print(f"  {name}: ROLLED BACK")
+                else:
+                    print(f"  {name}: ROLLBACK FAILED — {error} (MANUAL INTERVENTION NEEDED)")
+
+        print(f"\nDEPLOY FAILED — all devices rolled back to previous state.")
+        return 1
+
+    elif failed and not atomic:
+        print(f"WARNING: {len(failed)} devices failed (non-atomic mode, no rollback)")
+        print(f"  Failed: {', '.join(failed)}")
+        print(f"  Succeeded: {', '.join(succeeded)}")
+        return 1
+
+    else:
+        print(f"DEPLOY SUCCEEDED — {len(succeeded)} devices updated.")
+        return 0
 
 
 def cmd_diff(args):
@@ -381,8 +531,13 @@ def main():
     p = sub.add_parser("pull", help="Pull device config into configs/<device>.json")
     p.add_argument("device", help="Device name from inventory")
 
-    p = sub.add_parser("push", help="Push config file to device")
+    p = sub.add_parser("push", help="Push config file to a single device")
     p.add_argument("device", help="Device name from inventory")
+
+    p = sub.add_parser("deploy", help="Deploy to multiple devices (parallel + atomic)")
+    p.add_argument("devices", nargs="+", help="Device names to deploy")
+    p.add_argument("--workers", type=int, default=10, help="Parallel workers (default: 10)")
+    p.add_argument("--no-atomic", action="store_true", help="Skip rollback on failure")
 
     p = sub.add_parser("diff", help="Compare config file vs live device")
     p.add_argument("device", help="Device name from inventory")
@@ -407,6 +562,7 @@ def main():
     cmds = {
         "pull": cmd_pull,
         "push": cmd_push,
+        "deploy": cmd_deploy,
         "diff": cmd_diff,
         "validate": cmd_validate,
         "show": cmd_show,

@@ -1,5 +1,5 @@
 # Runs on self-hosted runner when configs/ changes on main.
-# Deploys to all affected devices in parallel with error isolation.
+# Deploys all affected devices in parallel with atomic rollback.
 
 name: Deploy to Devices
 
@@ -9,16 +9,14 @@ on:
     paths:
       - "configs/**"
 
-# Only one deploy at a time — queue subsequent pushes
+# Only one deploy at a time
 concurrency:
   group: deploy
   cancel-in-progress: false
 
 jobs:
-  detect:
+  deploy:
     runs-on: [self-hosted, network]
-    outputs:
-      devices: ${{ steps.detect.outputs.devices }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -30,23 +28,10 @@ jobs:
           devices=$(git diff --name-only HEAD~1 HEAD -- configs/ \
             | sed 's|configs/||;s|\.json||' \
             | sort -u \
-            | jq -R -s -c 'split("\n") | map(select(. != ""))')
+            | tr '\n' ' ')
           echo "devices=$devices"
           echo "devices=$devices" >> $GITHUB_OUTPUT
 
-  deploy:
-    needs: detect
-    if: needs.detect.outputs.devices != '[]'
-    runs-on: [self-hosted, network]
-    strategy:
-      matrix:
-        device: ${{ fromJson(needs.detect.outputs.devices) }}
-      fail-fast: false    # Don't stop other devices if one fails
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Deploy ${{ matrix.device }}
-        run: python3 shim push ${{ matrix.device }}
-
-      - name: Validate ${{ matrix.device }}
-        run: python3 shim validate ${{ matrix.device }}
+      - name: Deploy (parallel + atomic rollback)
+        if: steps.detect.outputs.devices != ''
+        run: python3 shim deploy ${{ steps.detect.outputs.devices }}
