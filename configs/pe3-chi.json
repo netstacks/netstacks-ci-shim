@@ -3707,13 +3707,23 @@
           "config": {
             "interface-id": "Ethernet1"
           },
-          "interface-id": "Ethernet1"
+          "interface-id": "Ethernet1",
+          "interface-ref": {
+            "config": {
+              "interface": ""
+            }
+          }
         },
         {
           "config": {
             "interface-id": "Ethernet2"
           },
-          "interface-id": "Ethernet2"
+          "interface-id": "Ethernet2",
+          "interface-ref": {
+            "config": {
+              "interface": ""
+            }
+          }
         }
       ]
     }

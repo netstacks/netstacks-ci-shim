@@ -3502,7 +3502,12 @@
           "config": {
             "interface-id": "Ethernet1"
           },
-          "interface-id": "Ethernet1"
+          "interface-id": "Ethernet1",
+          "interface-ref": {
+            "config": {
+              "interface": ""
+            }
+          }
         }
       ]
     }
