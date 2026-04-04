@@ -1,0 +1,13 @@
+# L3VPN for Customer A
+#
+# This stack spans PE1, PE2, and CE1.
+# All three must succeed or all get rolled back.
+
+name: l3vpn-cust-a
+description: L3VPN service for Customer A
+atomic: true
+
+devices:
+  - pe1-nyc
+  - pe2-nyc
+  - ce1-nyc-globalbank

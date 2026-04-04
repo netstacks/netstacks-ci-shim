@@ -1,5 +1,0 @@
-ntp_servers:
-  - address: 10.0.0.1
-  - address: 10.0.0.2
-    prefer: true
-  - address: 10.0.0.3

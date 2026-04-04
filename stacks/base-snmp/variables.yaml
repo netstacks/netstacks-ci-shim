@@ -1,4 +1,0 @@
-snmp_contact: cwdavis
-snmp_location: AMS-DataCenter
-snmp_community: cwd_lab
-snmp_community_access: rw

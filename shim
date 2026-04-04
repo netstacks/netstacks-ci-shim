@@ -26,9 +26,9 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parent
 INVENTORY_FILE = REPO_ROOT / "inventory.yaml"
 CONFIGS_DIR = REPO_ROOT / "configs"
+STACKS_DIR = REPO_ROOT / "stacks"
 LIBRARY_DIR = REPO_ROOT / "library"
 DRIVERS_DIR = REPO_ROOT / "drivers"
-DEPLOYS_DIR = REPO_ROOT / "deploys"
 
 
 # ---------------------------------------------------------------------------
@@ -297,21 +297,20 @@ def cmd_deploy(args):
         return 0
 
 
-def cmd_service_deploy(args):
-    """Deploy using a service definition from deploys/."""
-    service_name = args.service
-    service_path = DEPLOYS_DIR / f"{service_name}.yaml"
+def cmd_stack_deploy(args):
+    """Deploy using a stack definition from stacks/."""
+    stack_name = args.stack
+    stack_path = STACKS_DIR / stack_name / "stack.yaml"
 
-    if not service_path.exists():
-        # List available services
-        print(f"Service '{service_name}' not found.")
-        if DEPLOYS_DIR.exists():
-            available = [f.stem for f in DEPLOYS_DIR.glob("*.yaml")]
+    if not stack_path.exists():
+        print(f"Stack '{stack_name}' not found.")
+        if STACKS_DIR.exists():
+            available = [d.name for d in STACKS_DIR.iterdir() if (d / "stack.yaml").exists()]
             if available:
                 print(f"Available: {', '.join(available)}")
         return 1
 
-    service = yaml.safe_load(open(service_path))
+    service = yaml.safe_load(open(stack_path))
     print(f"Service: {service.get('name', service_name)}")
     print(f"Description: {service.get('description', '')}")
     print()
@@ -328,20 +327,23 @@ def cmd_service_deploy(args):
     return cmd_deploy(deploy_args)
 
 
-def cmd_service_list(args):
-    """List available service deployments."""
-    if not DEPLOYS_DIR.exists():
-        print("No service deployments defined. Create YAML files in deploys/")
+def cmd_stack_list(args):
+    """List available stacks."""
+    if not STACKS_DIR.exists():
+        print("No stacks defined. Create directories in stacks/")
         return
 
-    print(f"{'Service':<25} {'Atomic':<10} {'Devices':<8} Description")
+    print(f"{'Stack':<25} {'Atomic':<10} {'Devices':<8} Description")
     print("-" * 80)
-    for f in sorted(DEPLOYS_DIR.glob("*.yaml")):
-        service = yaml.safe_load(open(f))
-        name = service.get("name", f.stem)
-        atomic = "yes" if service.get("atomic", True) else "no"
-        devices = len(service.get("devices", []))
-        desc = service.get("description", "")
+    for d in sorted(STACKS_DIR.iterdir()):
+        stack_file = d / "stack.yaml"
+        if not stack_file.exists():
+            continue
+        stack = yaml.safe_load(open(stack_file))
+        name = stack.get("name", d.name)
+        atomic = "yes" if stack.get("atomic", True) else "no"
+        devices = len(stack.get("devices", []))
+        desc = stack.get("description", "")
         print(f"{name:<25} {atomic:<10} {devices:<8} {desc}")
 
 
@@ -732,10 +734,10 @@ def main():
     p.add_argument("--workers", type=int, default=10, help="Parallel workers (default: 10)")
     p.add_argument("--no-atomic", action="store_true", help="Skip rollback on failure")
 
-    p = sub.add_parser("service-deploy", help="Deploy a named service (from deploys/)")
-    p.add_argument("service", help="Service name (e.g. l3vpn-cust-a)")
+    p = sub.add_parser("stack-deploy", help="Deploy a stack (from stacks/)")
+    p.add_argument("stack", help="Stack name (e.g. l3vpn-cust-a)")
 
-    sub.add_parser("service-list", help="List available service deployments")
+    sub.add_parser("stack-list", help="List available stacks")
 
     p = sub.add_parser("diff", help="Compare config file vs live device")
     p.add_argument("device", help="Device name from inventory")
@@ -771,8 +773,8 @@ def main():
         "pull": cmd_pull,
         "push": cmd_push,
         "deploy": cmd_deploy,
-        "service-deploy": cmd_service_deploy,
-        "service-list": cmd_service_list,
+        "stack-deploy": cmd_stack_deploy,
+        "stack-list": cmd_stack_list,
         "diff": cmd_diff,
         "validate": cmd_validate,
         "show": cmd_show,

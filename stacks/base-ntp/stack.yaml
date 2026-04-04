@@ -1,7 +1,0 @@
-name: base-ntp
-description: NTP server configuration
-template: ntp
-priority: 10
-
-devices:
-  - leaf01-eos

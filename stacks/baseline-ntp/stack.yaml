@@ -1,0 +1,18 @@
+# NTP standardization across all EOS devices
+#
+# Independent per device — one failure doesn't affect the rest.
+
+name: baseline-ntp
+description: NTP server standardization
+atomic: false
+
+devices:
+  - rr1-nyc
+  - p1-nyc
+  - p2-chi
+  - p3-ams
+  - pe1-nyc
+  - pe2-nyc
+  - pe3-chi
+  - pe4-dal
+  - sw1-chi-techcorp

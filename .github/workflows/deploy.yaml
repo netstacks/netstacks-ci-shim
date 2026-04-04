@@ -32,22 +32,22 @@ jobs:
 
           echo "Changed devices: $changed"
 
-          # Check if any service deployment covers these devices
+          # Check if any stack covers these devices
           deployed_devices=""
-          for service_file in deploys/*.yaml; do
-            [ -f "$service_file" ] || continue
+          for stack_dir in stacks/*/; do
+            [ -f "${stack_dir}stack.yaml" ] || continue
 
-            service_name=$(basename "$service_file" .yaml)
-            service_devices=$(python3 -c "
+            stack_name=$(basename "$stack_dir")
+            stack_devices=$(python3 -c "
           import yaml
-          s = yaml.safe_load(open('$service_file'))
+          s = yaml.safe_load(open('${stack_dir}stack.yaml'))
           print(' '.join(s.get('devices', [])))
           ")
 
-            # Check if any changed device is in this service
+            # Check if any changed device is in this stack
             match=false
             for device in $changed; do
-              if echo "$service_devices" | grep -qw "$device"; then
+              if echo "$stack_devices" | grep -qw "$device"; then
                 match=true
                 break
               fi
@@ -55,13 +55,13 @@ jobs:
 
             if [ "$match" = true ]; then
               echo ""
-              echo "=== Service: $service_name ==="
-              python3 shim service-deploy "$service_name"
-              deployed_devices="$deployed_devices $service_devices"
+              echo "=== Stack: $stack_name ==="
+              python3 shim stack-deploy "$stack_name"
+              deployed_devices="$deployed_devices $stack_devices"
             fi
           done
 
-          # Deploy remaining devices that aren't part of any service
+          # Deploy remaining devices that aren't part of any stack
           for device in $changed; do
             if ! echo "$deployed_devices" | grep -qw "$device"; then
               echo ""
