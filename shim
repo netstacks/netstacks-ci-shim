@@ -135,10 +135,14 @@ def cmd_push(args):
     config = load_config(device_name)
 
     print(f"Pushing config to {device_name} ({device['hostname']})...")
-    result = gnmi_push(device, config)
-    op = result["response"][0]["op"]
-    print(f"gNMI Set: {op}")
-    print(f"Device config replaced from {config_path(device_name).relative_to(REPO_ROOT)}")
+    try:
+        result = gnmi_push(device, config)
+        op = result["response"][0]["op"]
+        print(f"gNMI Set: {op}")
+        print(f"Device config replaced from {config_path(device_name).relative_to(REPO_ROOT)}")
+    except Exception as e:
+        print(f"PUSH FAILED for {device_name}: {e}")
+        return 1
 
 
 def cmd_diff(args):

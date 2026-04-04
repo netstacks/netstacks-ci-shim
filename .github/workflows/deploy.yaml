@@ -1,5 +1,5 @@
 # Runs on self-hosted runner when configs/ changes on main.
-# The runner is on your network — it can reach devices.
+# Deploys to all affected devices in parallel with error isolation.
 
 name: Deploy to Devices
 
@@ -9,9 +9,16 @@ on:
     paths:
       - "configs/**"
 
+# Only one deploy at a time — queue subsequent pushes
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
 jobs:
-  deploy:
+  detect:
     runs-on: [self-hosted, network]
+    outputs:
+      devices: ${{ steps.detect.outputs.devices }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -20,20 +27,26 @@ jobs:
       - name: Detect changed devices
         id: detect
         run: |
-          changed=$(git diff --name-only HEAD~1 HEAD -- configs/ | sed 's|configs/||;s|\.json||' | sort -u)
-          echo "devices=$changed"
-          echo "devices=$changed" >> $GITHUB_OUTPUT
+          devices=$(git diff --name-only HEAD~1 HEAD -- configs/ \
+            | sed 's|configs/||;s|\.json||' \
+            | sort -u \
+            | jq -R -s -c 'split("\n") | map(select(. != ""))')
+          echo "devices=$devices"
+          echo "devices=$devices" >> $GITHUB_OUTPUT
 
-      - name: Deploy
-        run: |
-          for device in ${{ steps.detect.outputs.devices }}; do
-            echo "=== Deploying $device ==="
-            python3 shim push "$device"
-          done
+  deploy:
+    needs: detect
+    if: needs.detect.outputs.devices != '[]'
+    runs-on: [self-hosted, network]
+    strategy:
+      matrix:
+        device: ${{ fromJson(needs.detect.outputs.devices) }}
+      fail-fast: false    # Don't stop other devices if one fails
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: Validate
-        run: |
-          for device in ${{ steps.detect.outputs.devices }}; do
-            echo "=== Validating $device ==="
-            python3 shim validate "$device"
-          done
+      - name: Deploy ${{ matrix.device }}
+        run: python3 shim push ${{ matrix.device }}
+
+      - name: Validate ${{ matrix.device }}
+        run: python3 shim validate ${{ matrix.device }}
