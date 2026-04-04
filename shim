@@ -17,6 +17,7 @@ Commands:
 
 import argparse
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -475,6 +476,149 @@ def cmd_status(args):
         print(f"{name:<20} {device.get('hostname', '?'):<18} {device.get('driver', '?'):<18} {state}")
 
 
+def _git(cmd):
+    """Run a git command and return stdout."""
+    result = subprocess.run(
+        ["git"] + cmd,
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip(), result.returncode
+
+
+def cmd_history(args):
+    """Show change history for a device."""
+    device_name = args.device
+    path = f"configs/{device_name}.json"
+    count = args.count
+
+    output, rc = _git(["log", f"-{count}", "--pretty=format:%h  %ar  %s", "--", path])
+    if rc != 0 or not output:
+        print(f"No history for {device_name}")
+        return
+
+    print(f"History for {device_name}:")
+    print()
+    lines = output.strip().split("\n")
+    for i, line in enumerate(lines):
+        marker = "  (current)" if i == 0 else ""
+        print(f"  {i}: {line}{marker}")
+
+    print()
+    print(f"To rollback: ./shim rollback {device_name} <number>")
+    print(f"To see diff: ./shim history {device_name} --diff <number>")
+
+    # Show diff for a specific version if requested
+    if args.diff is not None:
+        idx = args.diff
+        if idx >= len(lines):
+            print(f"Error: only {len(lines)} versions available")
+            return 1
+
+        commit_hash = lines[idx].split()[0]
+
+        if idx == 0:
+            # Diff current vs previous
+            diff_out, _ = _git(["diff", f"{commit_hash}~1", commit_hash, "--", path])
+        else:
+            # Diff that version vs the one before it
+            diff_out, _ = _git(["diff", f"{commit_hash}~1", commit_hash, "--", path])
+
+        if diff_out:
+            print()
+            print(f"Changes in version {idx} ({commit_hash}):")
+            print("-" * 60)
+            for line in diff_out.split("\n"):
+                if line.startswith("+") and not line.startswith("+++"):
+                    print(f"  \033[32m{line}\033[0m")  # green
+                elif line.startswith("-") and not line.startswith("---"):
+                    print(f"  \033[31m{line}\033[0m")  # red
+                elif line.startswith("@@"):
+                    print(f"  \033[36m{line}\033[0m")  # cyan
+            print("-" * 60)
+        else:
+            print(f"No diff available for version {idx}")
+
+
+def cmd_rollback(args):
+    """Rollback a device to a previous config version and optionally push."""
+    device_name = args.device
+    path = f"configs/{device_name}.json"
+    version = args.version
+
+    # Get commit history for this file
+    output, rc = _git(["log", "--pretty=format:%H  %ar  %s", "--", path])
+    if rc != 0 or not output:
+        print(f"No history for {device_name}")
+        return 1
+
+    commits = output.strip().split("\n")
+
+    if version >= len(commits):
+        print(f"Error: only {len(commits)} versions available (0-{len(commits)-1})")
+        return 1
+
+    if version == 0:
+        print(f"Version 0 is already the current config.")
+        return 0
+
+    target_hash = commits[version].split()[0]
+    target_desc = commits[version]
+
+    print(f"Rolling back {device_name} to version {version}:")
+    print(f"  {target_desc}")
+    print()
+
+    # Show what will change
+    current_hash = commits[0].split()[0]
+    diff_out, _ = _git(["diff", current_hash, target_hash, "--", path])
+    if diff_out:
+        added = sum(1 for l in diff_out.split("\n") if l.startswith("+") and not l.startswith("+++"))
+        removed = sum(1 for l in diff_out.split("\n") if l.startswith("-") and not l.startswith("---"))
+        print(f"  Changes: +{added} lines, -{removed} lines")
+    else:
+        print(f"  No differences (configs are identical)")
+        return 0
+
+    # Restore the file from that commit
+    file_content, rc = _git(["show", f"{target_hash}:{path}"])
+    if rc != 0:
+        print(f"Error: could not read {path} from commit {target_hash}")
+        return 1
+
+    # Write it
+    config_path(device_name).write_text(file_content)
+    print(f"  Restored configs/{device_name}.json to version {version}")
+
+    # Commit the rollback
+    _git(["add", path])
+    msg = f"Rollback {device_name} to version {version} ({target_hash[:7]})"
+    _git(["commit", "-m", msg])
+    print(f"  Committed: {msg}")
+
+    # Push to device if requested
+    if args.push:
+        print()
+        print(f"Pushing rollback to {device_name}...")
+        device = get_device(device_name)
+        config = json.loads(file_content)
+        try:
+            gnmi_push(device, config)
+            print(f"  PUSHED — {device_name} restored to version {version}")
+        except Exception as e:
+            print(f"  PUSH FAILED: {e}")
+            print(f"  Config file is rolled back but device was not updated.")
+            print(f"  Run './shim push {device_name}' to retry.")
+            return 1
+    else:
+        print()
+        print(f"Config file rolled back. To apply to device:")
+        print(f"  ./shim push {device_name}")
+        print(f"Or push to git and let CI deploy:")
+        print(f"  git push")
+
+
 def cmd_library(args):
     """Browse available service templates."""
     if not LIBRARY_DIR.exists():
@@ -549,6 +693,16 @@ def main():
     p.add_argument("device", help="Device name from inventory")
     p.add_argument("section", nargs="?", help="Config section path (e.g. system/ntp)")
 
+    p = sub.add_parser("history", help="Show change history for a device")
+    p.add_argument("device", help="Device name from inventory")
+    p.add_argument("--count", type=int, default=10, help="Number of versions to show")
+    p.add_argument("--diff", type=int, default=None, metavar="N", help="Show diff for version N")
+
+    p = sub.add_parser("rollback", help="Rollback device to a previous version")
+    p.add_argument("device", help="Device name from inventory")
+    p.add_argument("version", type=int, help="Version number from 'shim history'")
+    p.add_argument("--push", action="store_true", help="Also push rollback to device immediately")
+
     sub.add_parser("status", help="Show all devices and config state")
 
     p = sub.add_parser("library", help="Browse service templates")
@@ -566,6 +720,8 @@ def main():
         "diff": cmd_diff,
         "validate": cmd_validate,
         "show": cmd_show,
+        "history": cmd_history,
+        "rollback": cmd_rollback,
         "status": cmd_status,
         "library": cmd_library,
     }
