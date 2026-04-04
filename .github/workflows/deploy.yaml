@@ -1,4 +1,4 @@
-# Runs on self-hosted runner when configs/ changes on main.
+# Runs automatically when configs/ changes on main (PR merged or direct push).
 # Deploys all affected devices in parallel with atomic rollback.
 
 name: Deploy to Devices
@@ -9,7 +9,6 @@ on:
     paths:
       - "configs/**"
 
-# Only one deploy at a time
 concurrency:
   group: deploy
   cancel-in-progress: false
@@ -32,6 +31,6 @@ jobs:
           echo "devices=$devices"
           echo "devices=$devices" >> $GITHUB_OUTPUT
 
-      - name: Deploy (parallel + atomic rollback)
+      - name: Deploy
         if: steps.detect.outputs.devices != ''
         run: python3 shim deploy ${{ steps.detect.outputs.devices }}

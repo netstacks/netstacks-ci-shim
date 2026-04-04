@@ -1,47 +1,39 @@
-# This runs automatically when you open or update a PR.
-# You don't trigger it. GitHub does.
-#
-# What it does:
-#   1. Renders your templates (shim render)
-#   2. Checks for conflicts (shim lint)
-#   3. Commits the rendered output back to your branch
-#
-# After this runs, your PR shows both your YAML change
-# AND the generated device config — so reviewers can see
-# exactly what will go to the device.
+# Runs automatically when someone opens a PR that touches configs/.
+# Shows what would change on each device — review before merging.
 
-name: Preview Config Changes
+name: Preview Changes
 
 on:
   pull_request:
     branches: [main]
+    paths:
+      - "configs/**"
 
 jobs:
-  render:
-    runs-on: ubuntu-latest
+  preview:
+    runs-on: [self-hosted, network]
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          fetch-depth: 0
 
-      - run: pip install jinja2 pyyaml
+      - name: Detect changed devices
+        id: detect
+        run: |
+          devices=$(git diff --name-only origin/main...HEAD -- configs/ \
+            | sed 's|configs/||;s|\.json||' \
+            | sort -u)
+          echo "devices=$devices"
+          echo "devices=$devices" >> $GITHUB_OUTPUT
 
-      # Render all stacks — produces files in rendered/
-      - run: python3 shim render
-
-      # Check for conflicts between stacks
-      - run: python3 shim lint
-
-      # Assemble per-device configs
-      - run: python3 shim assemble
-
-      # Commit rendered output back to the PR branch
-      # so reviewers can see what will go to devices
-      - run: |
-          git config user.name "netstacks-ci-shim"
-          git config user.email "ci@netstacks.io"
-          git add rendered/ assembled/
-          git diff --cached --quiet || git commit -m "ci: render config artifacts"
-          git push
+      - name: Preview diffs
+        run: |
+          echo "## Config Preview" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          for device in ${{ steps.detect.outputs.devices }}; do
+            echo "### $device" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            python3 shim diff "$device" 2>&1 >> $GITHUB_STEP_SUMMARY || echo "  (could not reach device for live diff)" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          done
