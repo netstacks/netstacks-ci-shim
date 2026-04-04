@@ -1,705 +1,370 @@
 #!/usr/bin/env python3
 """netstacks-ci-shim: Git-native network config management.
 
-Renders Jinja2 templates into device config, tracks changes in Git,
-and deploys via structured APIs (eAPI, NETCONF, gNMI). No CLI parsing.
-No SSH. The device handles the "how."
+Manage device configs as JSON files in a Git repo. Push via gNMI/NETCONF.
+The device handles the "how" — adds, removes, and modifications are all
+a single replace operation.
 
 Commands:
-    render   - Render a stack's templates into device config fragments
-    assemble - Combine all rendered fragments for a device
-    lint     - Check for conflicts between stacks on the same device
-    diff     - Show what would change on a device
-    deploy   - Push rendered config to a device
-    validate - Pull live config and compare to rendered
-    pull     - Fetch a device's running config and save as snapshot
-    status   - Show which devices have pending changes
+    pull      - Pull device config into configs/<device>.json
+    push      - Push configs/<device>.json to the device
+    diff      - Compare local config file vs live device
+    show      - Browse device config in a readable format
+    validate  - Check if device matches the config file
+    status    - Show all devices and their config state
+    library   - Browse available service templates
 """
 
 import argparse
 import json
-import os
 import sys
-import time
 from pathlib import Path
 
-import jinja2
 import yaml
-
-
-# ---------------------------------------------------------------------------
-# Paths
-# ---------------------------------------------------------------------------
 
 REPO_ROOT = Path(__file__).resolve().parent
 INVENTORY_FILE = REPO_ROOT / "inventory.yaml"
+CONFIGS_DIR = REPO_ROOT / "configs"
 LIBRARY_DIR = REPO_ROOT / "library"
-STACKS_DIR = REPO_ROOT / "stacks"
 DRIVERS_DIR = REPO_ROOT / "drivers"
-RENDERED_DIR = REPO_ROOT / "rendered"
-ASSEMBLED_DIR = REPO_ROOT / "assembled"
-SNAPSHOTS_DIR = REPO_ROOT / "snapshots"
-DEPLOYED_DIR = REPO_ROOT / "deployed"
 
 
 # ---------------------------------------------------------------------------
-# Loading helpers
+# Inventory
 # ---------------------------------------------------------------------------
-
-def load_yaml(path):
-    """Load a YAML file and return the parsed dict."""
-    with open(path) as f:
-        return yaml.safe_load(f) or {}
-
 
 def load_inventory():
-    """Load the device inventory."""
-    return load_yaml(INVENTORY_FILE).get("devices", {})
+    with open(INVENTORY_FILE) as f:
+        return yaml.safe_load(f).get("devices", {})
 
 
-def load_stack(stack_name):
-    """Load a stack definition: stack.yaml + variables.yaml + overrides."""
-    stack_dir = STACKS_DIR / stack_name
-    if not stack_dir.exists():
-        print(f"Error: stack '{stack_name}' not found at {stack_dir}")
+def get_device(name):
+    inv = load_inventory()
+    if name not in inv:
+        print(f"Error: device '{name}' not in inventory")
         sys.exit(1)
-
-    stack = load_yaml(stack_dir / "stack.yaml")
-    variables = load_yaml(stack_dir / "variables.yaml")
-    stack["variables"] = variables
-
-    # Load per-device overrides
-    overrides_dir = stack_dir / "overrides"
-    stack["overrides"] = {}
-    if overrides_dir.exists():
-        for f in overrides_dir.glob("*.yaml"):
-            device_name = f.stem
-            stack["overrides"][device_name] = load_yaml(f)
-
-    return stack
-
-
-def load_driver(driver_name):
-    """Load a driver definition."""
-    driver_path = DRIVERS_DIR / driver_name / "driver.yaml"
-    if not driver_path.exists():
-        print(f"Error: driver '{driver_name}' not found at {driver_path}")
-        sys.exit(1)
-    return load_yaml(driver_path)
-
-
-def get_all_stacks():
-    """List all stack names."""
-    if not STACKS_DIR.exists():
-        return []
-    return [d.name for d in STACKS_DIR.iterdir() if d.is_dir() and (d / "stack.yaml").exists()]
-
-
-def get_stacks_for_device(device_name):
-    """Find all stacks that target a specific device."""
-    result = []
-    for stack_name in get_all_stacks():
-        stack = load_stack(stack_name)
-        if device_name in stack.get("devices", []):
-            result.append((stack_name, stack))
-    return result
+    return inv[name]
 
 
 # ---------------------------------------------------------------------------
-# Render
+# gNMI transport
 # ---------------------------------------------------------------------------
 
-def resolve_template(template_ref):
-    """Resolve a template reference to a file path.
-
-    Supports two formats:
-      - Library reference: "ntp" → library/ntp/template.j2
-      - Direct file path:  "ntp-eos.j2" → library/*/ntp-eos.j2 or templates/ntp-eos.j2
-    """
-    # Check if it's a library service name (no extension)
-    lib_path = LIBRARY_DIR / template_ref / "template.j2"
-    if lib_path.exists():
-        return lib_path
-
-    # Check if it's a direct .j2 filename in any library folder
-    for service_dir in LIBRARY_DIR.iterdir():
-        if service_dir.is_dir():
-            candidate = service_dir / template_ref
-            if candidate.exists():
-                return candidate
-
-    # Fallback: check old templates/ dir for backwards compat
-    old_path = REPO_ROOT / "templates" / template_ref
-    if old_path.exists():
-        return old_path
-
-    return None
-
-
-def render_template(template_ref, variables):
-    """Render a Jinja2 template with the given variables."""
-    template_path = resolve_template(template_ref)
-    if template_path is None:
-        raise FileNotFoundError(f"Template not found: {template_ref}")
-
-    env = jinja2.Environment(
-        loader=jinja2.FileSystemLoader(str(template_path.parent)),
-        undefined=jinja2.StrictUndefined,
-        keep_trailing_newline=True,
-    )
-    template = env.get_template(template_path.name)
-    return template.render(**variables)
-
-
-def cmd_render(args):
-    """Render a stack's templates for all its target devices."""
-    stack_names = args.stack if args.stack else get_all_stacks()
-
-    for stack_name in stack_names:
-        stack = load_stack(stack_name)
-        template_name = stack["template"]
-        base_vars = stack["variables"]
-        devices = stack.get("devices", [])
-        overrides = stack.get("overrides", {})
-
-        print(f"Rendering stack: {stack_name}")
-        print(f"  Template: {template_name}")
-        print(f"  Devices:  {', '.join(devices)}")
-
-        for device in devices:
-            # Merge base variables with per-device overrides
-            merged_vars = {**base_vars}
-            if device in overrides:
-                merged_vars.update(overrides[device])
-
-            # Render
-            try:
-                rendered = render_template(template_name, merged_vars)
-            except jinja2.UndefinedError as e:
-                print(f"  ERROR [{device}]: Missing variable: {e}")
-                continue
-            except Exception as e:
-                print(f"  ERROR [{device}]: {e}")
-                continue
-
-            # Write rendered output
-            device_dir = RENDERED_DIR / device
-            device_dir.mkdir(parents=True, exist_ok=True)
-            out_path = device_dir / f"{stack_name}.cfg"
-            out_path.write_text(rendered)
-            print(f"  Rendered: {out_path.relative_to(REPO_ROOT)}")
-
-    print("\nDone. Review rendered/ and commit to your branch.")
-
-
-# ---------------------------------------------------------------------------
-# Assemble
-# ---------------------------------------------------------------------------
-
-def cmd_assemble(args):
-    """Assemble all rendered fragments for a device into one config."""
-    inventory = load_inventory()
-    device_names = args.device if args.device else list(inventory.keys())
-
-    ASSEMBLED_DIR.mkdir(parents=True, exist_ok=True)
-
-    for device_name in device_names:
-        device_rendered = RENDERED_DIR / device_name
-        if not device_rendered.exists():
-            continue
-
-        # Collect fragments sorted by stack priority (from stack.yaml)
-        fragments = []
-        for cfg_file in sorted(device_rendered.glob("*.cfg")):
-            stack_name = cfg_file.stem
-            # Try to load priority from stack.yaml
-            priority = 100
-            stack_yaml = STACKS_DIR / stack_name / "stack.yaml"
-            if stack_yaml.exists():
-                s = load_yaml(stack_yaml)
-                priority = s.get("priority", 100)
-            fragments.append((priority, stack_name, cfg_file.read_text()))
-
-        fragments.sort(key=lambda x: x[0])
-
-        # Assemble with section headers
-        assembled_lines = [f"! Assembled config for {device_name}"]
-        assembled_lines.append(f"! Generated by netstacks-ci-shim")
-        assembled_lines.append(f"! Stacks: {', '.join(f[1] for f in fragments)}")
-        assembled_lines.append("!")
-
-        for _, stack_name, content in fragments:
-            assembled_lines.append(f"! --- stack: {stack_name} ---")
-            assembled_lines.append(content.rstrip())
-            assembled_lines.append("!")
-
-        out_path = ASSEMBLED_DIR / f"{device_name}.cfg"
-        out_path.write_text("\n".join(assembled_lines) + "\n")
-        print(f"Assembled: {out_path.relative_to(REPO_ROOT)} ({len(fragments)} stacks)")
-
-    print("\nDone.")
-
-
-# ---------------------------------------------------------------------------
-# Lint
-# ---------------------------------------------------------------------------
-
-def cmd_lint(args):
-    """Check for conflicts: same config line in multiple stacks for one device."""
-    inventory = load_inventory()
-    has_conflicts = False
-
-    for device_name in inventory:
-        device_rendered = RENDERED_DIR / device_name
-        if not device_rendered.exists():
-            continue
-
-        # Collect all non-empty, non-comment lines per stack
-        line_owners = {}  # line -> list of stack names
-        for cfg_file in device_rendered.glob("*.cfg"):
-            stack_name = cfg_file.stem
-            for line in cfg_file.read_text().splitlines():
-                stripped = line.strip()
-                if not stripped or stripped.startswith("!"):
-                    continue
-                # Skip common shared lines
-                if stripped in ("no shutdown", "exit", "end"):
-                    continue
-                line_owners.setdefault(stripped, []).append(stack_name)
-
-        conflicts = {line: owners for line, owners in line_owners.items() if len(owners) > 1}
-        if conflicts:
-            has_conflicts = True
-            print(f"CONFLICTS on {device_name}:")
-            for line, owners in conflicts.items():
-                print(f"  '{line}' in: {', '.join(owners)}")
-            print()
-
-    if not has_conflicts:
-        print("No conflicts found.")
-
-    return 1 if has_conflicts else 0
-
-
-# ---------------------------------------------------------------------------
-# eAPI transport
-# ---------------------------------------------------------------------------
-
-def eapi_call(hostname, username, password, cmds, fmt="text"):
-    """Make an eAPI JSON-RPC call to an Arista device."""
-    import urllib.request
-    import ssl
-    import base64
-
-    ctx = ssl._create_unverified_context()
-    creds = base64.b64encode(f"{username}:{password}".encode()).decode()
-
-    req = urllib.request.Request(
-        f"https://{hostname}/command-api",
-        data=json.dumps({
-            "jsonrpc": "2.0",
-            "method": "runCmds",
-            "params": {"version": 1, "cmds": cmds, "format": fmt},
-            "id": 1,
-        }).encode(),
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Basic {creds}",
-        },
+def gnmi_connect(device):
+    from pygnmi.client import gNMIclient
+    cred = device["credential"]
+    return gNMIclient(
+        target=(device["hostname"], device.get("gnmi_port", 6030)),
+        username=cred["username"],
+        password=cred["password"],
+        insecure=True,
+        skip_verify=True,
+        gnmi_timeout=30,
     )
 
-    resp = urllib.request.urlopen(req, context=ctx, timeout=30)
-    data = json.loads(resp.read())
 
-    if "error" in data:
-        raise RuntimeError(f"eAPI error: {json.dumps(data['error'])}")
+def gnmi_pull(device):
+    """Pull full config from device via gNMI Get."""
+    with gnmi_connect(device) as gc:
+        result = gc.get(path=["/"], datatype="config", encoding="json_ietf")
+        return result["notification"][0]["update"][0]["val"]
 
-    return data["result"]
+
+def gnmi_push(device, config):
+    """Push full config to device via gNMI Set replace."""
+    with gnmi_connect(device) as gc:
+        result = gc.set(replace=[("/", config)], encoding="json_ietf")
+        return result
 
 
-def get_device_connection(device_name):
-    """Get connection details for a device from inventory."""
-    inventory = load_inventory()
-    if device_name not in inventory:
-        print(f"Error: device '{device_name}' not in inventory")
+def gnmi_get_section(device, path):
+    """Pull a specific config section via gNMI Get."""
+    with gnmi_connect(device) as gc:
+        result = gc.get(path=[path], datatype="config", encoding="json_ietf")
+        return result["notification"][0]["update"][0]["val"]
+
+
+# ---------------------------------------------------------------------------
+# Config file helpers
+# ---------------------------------------------------------------------------
+
+def config_path(device_name):
+    return CONFIGS_DIR / f"{device_name}.json"
+
+
+def load_config(device_name):
+    path = config_path(device_name)
+    if not path.exists():
+        print(f"No config file for {device_name}. Run: shim pull {device_name}")
         sys.exit(1)
-    return inventory[device_name]
+    with open(path) as f:
+        return json.load(f)
+
+
+def save_config(device_name, config):
+    CONFIGS_DIR.mkdir(parents=True, exist_ok=True)
+    path = config_path(device_name)
+    with open(path, "w") as f:
+        json.dump(config, f, indent=2)
+        f.write("\n")
+    return path
 
 
 # ---------------------------------------------------------------------------
-# Diff (via EOS configure session)
-# ---------------------------------------------------------------------------
-
-def _compute_config_commands(device_name):
-    """Compute config lines to push: additions from rendered + removals from deployed diff.
-
-    Compares current rendered/ against last deployed/ to detect lines that
-    were removed from templates (need 'no' prefix to remove from device).
-    """
-    device_rendered = RENDERED_DIR / device_name
-    device_deployed = DEPLOYED_DIR / device_name
-
-    # Current rendered lines
-    new_lines = []
-    if device_rendered.exists():
-        for cfg_file in sorted(device_rendered.glob("*.cfg")):
-            for line in cfg_file.read_text().splitlines():
-                stripped = line.rstrip()
-                if stripped and not stripped.startswith("!"):
-                    new_lines.append(stripped)
-
-    # Previously deployed lines
-    old_lines = []
-    if device_deployed.exists():
-        for cfg_file in sorted(device_deployed.glob("*.cfg")):
-            for line in cfg_file.read_text().splitlines():
-                stripped = line.rstrip()
-                if stripped and not stripped.startswith("!"):
-                    old_lines.append(stripped)
-
-    # Lines removed from templates need "no" prefix to remove from device
-    new_set = set(new_lines)
-    old_set = set(old_lines)
-    removed = old_set - new_set
-
-    config_cmds = []
-    for line in removed:
-        config_cmds.append(f"no {line}")
-    config_cmds.extend(new_lines)
-
-    return config_cmds, list(removed), new_lines
-
-
-def cmd_diff(args):
-    """Show what would change on a device using EOS configure sessions."""
-    device_name = args.device
-    device = get_device_connection(device_name)
-    cred = device["credential"]
-
-    config_cmds, removed, new_lines = _compute_config_commands(device_name)
-
-    if not config_cmds:
-        print(f"No config to push for {device_name}")
-        return
-
-    if removed:
-        print(f"Lines removed from templates (will negate):")
-        for line in removed:
-            print(f"  - {line}")
-        print()
-
-    # Use EOS configure session to preview changes
-    session_name = f"shim-diff-{int(time.time())}"
-    cmds = ["enable", f"configure session {session_name}"]
-    cmds.extend(config_cmds)
-    cmds.append("show session-config diffs")
-    cmds.append("abort")
-
-    print(f"Connecting to {device_name} ({device['hostname']})...")
-    try:
-        result = eapi_call(
-            device["hostname"], cred["username"], cred["password"],
-            cmds, fmt="text",
-        )
-        diff_idx = len(cmds) - 2
-        diff_output = result[diff_idx].get("output", "").strip()
-
-        if diff_output:
-            print(f"\nConfig diff for {device_name}:")
-            print("=" * 60)
-            print(diff_output)
-            print("=" * 60)
-        else:
-            print(f"\n{device_name}: no changes (config is in sync)")
-
-    except Exception as e:
-        print(f"Error: {e}")
-        return 1
-
-
-# ---------------------------------------------------------------------------
-# Deploy (via EOS configure session + commit)
-# ---------------------------------------------------------------------------
-
-def _save_deployed_state(device_name):
-    """Copy rendered/ to deployed/ after a successful deploy."""
-    device_rendered = RENDERED_DIR / device_name
-    device_deployed = DEPLOYED_DIR / device_name
-    device_deployed.mkdir(parents=True, exist_ok=True)
-
-    # Clear old deployed state
-    for f in device_deployed.glob("*.cfg"):
-        f.unlink()
-
-    # Copy current rendered as new deployed state
-    if device_rendered.exists():
-        for cfg_file in device_rendered.glob("*.cfg"):
-            (device_deployed / cfg_file.name).write_text(cfg_file.read_text())
-
-
-def cmd_deploy(args):
-    """Deploy rendered config to a device using EOS configure sessions."""
-    device_name = args.device
-    device = get_device_connection(device_name)
-    cred = device["credential"]
-    dry_run = args.dry_run
-
-    config_cmds, removed, new_lines = _compute_config_commands(device_name)
-
-    # Collect stack names from rendered
-    device_rendered = RENDERED_DIR / device_name
-    stacks_deployed = []
-    if device_rendered.exists():
-        stacks_deployed = [f.stem for f in sorted(device_rendered.glob("*.cfg"))]
-
-    if not config_cmds:
-        print(f"No config to deploy for {device_name}")
-        return
-
-    print(f"Deploying to {device_name} ({device['hostname']})")
-    print(f"  Stacks: {', '.join(stacks_deployed)}")
-    print(f"  Config lines: {len(new_lines)} add, {len(removed)} remove")
-    print(f"  Mode: {'DRY RUN' if dry_run else 'LIVE DEPLOY'}")
-
-    if removed:
-        print(f"\n  Removing (no longer in templates):")
-        for line in removed:
-            print(f"    - {line}")
-    print()
-
-    session_name = f"shim-deploy-{int(time.time())}"
-
-    cmds = ["enable", f"configure session {session_name}"]
-    cmds.extend(config_cmds)
-    cmds.append("show session-config diffs")
-
-    if dry_run:
-        cmds.append("abort")
-    else:
-        cmds.append("commit")
-
-    try:
-        result = eapi_call(
-            device["hostname"], cred["username"], cred["password"],
-            cmds, fmt="text",
-        )
-
-        diff_idx = len(config_cmds) + 2
-        diff_output = result[diff_idx].get("output", "").strip()
-
-        if diff_output:
-            print("Changes:")
-            print("-" * 60)
-            print(diff_output)
-            print("-" * 60)
-        else:
-            print("No changes needed (config already matches)")
-
-        if dry_run:
-            print("\nDRY RUN: session aborted, nothing was changed.")
-        else:
-            # Save deployed state so next deploy can compute removals
-            _save_deployed_state(device_name)
-            print(f"\nDEPLOYED successfully to {device_name}.")
-
-    except Exception as e:
-        print(f"Deploy failed: {e}")
-        try:
-            eapi_call(
-                device["hostname"], cred["username"], cred["password"],
-                ["enable", f"configure session {session_name}", "abort"],
-            )
-        except Exception:
-            pass
-        return 1
-
-
-# ---------------------------------------------------------------------------
-# Validate
-# ---------------------------------------------------------------------------
-
-def cmd_validate(args):
-    """Pull live config and compare to rendered config."""
-    device_name = args.device
-    device = get_device_connection(device_name)
-    cred = device["credential"]
-
-    # Use the diff approach - if configure session shows no diff,
-    # the device matches rendered state
-    device_rendered = RENDERED_DIR / device_name
-    if not device_rendered.exists():
-        print(f"No rendered config for {device_name}")
-        return
-
-    config_lines = []
-    for cfg_file in sorted(device_rendered.glob("*.cfg")):
-        for line in cfg_file.read_text().splitlines():
-            stripped = line.rstrip()
-            if stripped and not stripped.startswith("!"):
-                config_lines.append(stripped)
-
-    session_name = "shim-validate"
-    cmds = ["enable", f"configure session {session_name}"]
-    cmds.extend(config_lines)
-    cmds.append("show session-config diffs")
-    cmds.append("abort")
-
-    print(f"Validating {device_name} ({device['hostname']})...")
-
-    try:
-        result = eapi_call(
-            device["hostname"], cred["username"], cred["password"],
-            cmds, fmt="text",
-        )
-
-        diff_idx = len(config_lines) + 2
-        diff_output = result[diff_idx].get("output", "").strip()
-
-        if diff_output:
-            print(f"DRIFT DETECTED on {device_name}:")
-            print("-" * 60)
-            print(diff_output)
-            print("-" * 60)
-            return 1
-        else:
-            print(f"IN SYNC: {device_name} matches rendered config")
-            return 0
-
-    except Exception as e:
-        print(f"Validation failed: {e}")
-        return 1
-
-
-# ---------------------------------------------------------------------------
-# Pull
+# Commands
 # ---------------------------------------------------------------------------
 
 def cmd_pull(args):
-    """Pull running config from a device and save as a snapshot."""
+    """Pull device config into configs/<device>.json."""
     device_name = args.device
-    device = get_device_connection(device_name)
-    cred = device["credential"]
-
-    SNAPSHOTS_DIR.mkdir(parents=True, exist_ok=True)
+    device = get_device(device_name)
 
     print(f"Pulling config from {device_name} ({device['hostname']})...")
+    config = gnmi_pull(device)
 
+    path = save_config(device_name, config)
+    keys = sorted(k.split(":")[-1] for k in config.keys())
+    print(f"Saved: {path.relative_to(REPO_ROOT)}")
+    print(f"Sections: {', '.join(keys)}")
+
+
+def cmd_push(args):
+    """Push configs/<device>.json to the device."""
+    device_name = args.device
+    device = get_device(device_name)
+    config = load_config(device_name)
+
+    print(f"Pushing config to {device_name} ({device['hostname']})...")
+    result = gnmi_push(device, config)
+    op = result["response"][0]["op"]
+    print(f"gNMI Set: {op}")
+    print(f"Device config replaced from {config_path(device_name).relative_to(REPO_ROOT)}")
+
+
+def cmd_diff(args):
+    """Compare local config file vs live device."""
+    device_name = args.device
+    device = get_device(device_name)
+    local_config = load_config(device_name)
+
+    print(f"Pulling live config from {device_name}...")
+    live_config = gnmi_pull(device)
+
+    # Deep compare
     try:
-        result = eapi_call(
-            device["hostname"], cred["username"], cred["password"],
-            ["enable", "show running-config"],
-            fmt="text",
-        )
+        from deepdiff import DeepDiff
+        diff = DeepDiff(live_config, local_config, ignore_order=True)
+    except ImportError:
+        # Fallback: simple JSON comparison
+        if json.dumps(live_config, sort_keys=True) == json.dumps(local_config, sort_keys=True):
+            diff = {}
+        else:
+            diff = {"note": "install deepdiff for detailed diff"}
 
-        config = result[1].get("output", "")
-        out_path = SNAPSHOTS_DIR / f"{device_name}.cfg"
-        out_path.write_text(config)
-        print(f"Saved: {out_path.relative_to(REPO_ROOT)} ({len(config)} bytes)")
+    if not diff:
+        print(f"{device_name}: no differences (file matches device)")
+    else:
+        print(f"{device_name}: differences found")
+        print()
+        if hasattr(diff, 'to_dict'):
+            d = diff.to_dict()
+        else:
+            d = diff
 
-    except Exception as e:
-        print(f"Pull failed: {e}")
+        for change_type, changes in d.items():
+            print(f"  {change_type}:")
+            if isinstance(changes, dict):
+                for path, detail in list(changes.items())[:20]:
+                    print(f"    {path}: {detail}")
+            elif isinstance(changes, list):
+                for item in changes[:20]:
+                    print(f"    {item}")
+            else:
+                print(f"    {changes}")
+            print()
+
+
+def cmd_validate(args):
+    """Check if device matches the config file."""
+    device_name = args.device
+    device = get_device(device_name)
+    local_config = load_config(device_name)
+
+    print(f"Validating {device_name} ({device['hostname']})...")
+    live_config = gnmi_pull(device)
+
+    # Compare
+    local_str = json.dumps(local_config, sort_keys=True)
+    live_str = json.dumps(live_config, sort_keys=True)
+
+    if local_str == live_str:
+        print(f"IN SYNC: {device_name} matches config file")
+        return 0
+    else:
+        print(f"DRIFT: {device_name} does not match config file")
+        print(f"  Run 'shim diff {device_name}' for details")
+        print(f"  Run 'shim push {device_name}' to fix")
         return 1
 
 
-# ---------------------------------------------------------------------------
-# Status
-# ---------------------------------------------------------------------------
+def cmd_show(args):
+    """Browse device config in a readable format."""
+    device_name = args.device
+    config = load_config(device_name)
+    section = args.section
+
+    if not section:
+        # Top-level overview
+        print(f"{device_name} config sections:")
+        print()
+        for key in sorted(config.keys()):
+            display = key.split(":")[-1]
+            val = config[key]
+            if isinstance(val, dict):
+                subkeys = [k.split(":")[-1] for k in val.keys()]
+                print(f"  {display}/")
+                for sk in subkeys[:8]:
+                    print(f"    {sk}")
+                if len(subkeys) > 8:
+                    print(f"    ... +{len(subkeys) - 8} more")
+            print()
+        return
+
+    # Navigate to the section
+    current = config
+    parts = section.strip("/").split("/")
+    for part in parts:
+        if isinstance(current, dict):
+            matched = None
+            for key in current:
+                clean = key.split(":")[-1] if ":" in key else key
+                if clean == part:
+                    matched = key
+                    break
+            if matched:
+                current = current[matched]
+            else:
+                print(f"Section not found: {part}")
+                print(f"Available: {[k.split(':')[-1] for k in current.keys()]}")
+                return 1
+        elif isinstance(current, list):
+            found = False
+            for item in current:
+                if isinstance(item, dict):
+                    for id_field in ["name", "address", "id", "community-set-name"]:
+                        if str(item.get(id_field)) == part:
+                            current = item
+                            found = True
+                            break
+                if found:
+                    break
+            if not found:
+                ids = []
+                for item in current:
+                    if isinstance(item, dict):
+                        for f in ["name", "address", "id"]:
+                            if f in item:
+                                ids.append(str(item[f]))
+                                break
+                print(f"Not found: {part}")
+                print(f"Available: {ids}")
+                return 1
+
+    # Display the result
+    _show_section(current)
+
+
+def _show_section(data, indent=0):
+    """Display structured data readably."""
+    p = "  " * indent
+    if isinstance(data, dict):
+        for key in data:
+            clean = key.split(":")[-1] if ":" in key else key
+            val = data[key]
+            if isinstance(val, dict):
+                print(f"{p}{clean}:")
+                _show_section(val, indent + 1)
+            elif isinstance(val, list):
+                if not val:
+                    print(f"{p}{clean}: []")
+                elif all(not isinstance(i, (dict, list)) for i in val):
+                    print(f"{p}{clean}: {val}")
+                else:
+                    print(f"{p}{clean}:")
+                    for item in val:
+                        _show_section(item, indent + 1)
+                        if isinstance(item, dict):
+                            print(f"{p}  ---")
+            else:
+                print(f"{p}{clean}: {val}")
+    elif isinstance(data, list):
+        for item in data:
+            _show_section(item, indent)
+            if isinstance(item, dict):
+                print(f"{p}---")
+    else:
+        print(f"{p}{data}")
+
 
 def cmd_status(args):
-    """Show status of all devices: which have rendered config, which stacks."""
+    """Show all devices and their config state."""
     inventory = load_inventory()
+    print(f"{'Device':<20} {'Hostname':<18} {'Driver':<18} {'Config File'}")
+    print("-" * 75)
+    for name, device in inventory.items():
+        path = config_path(name)
+        if path.exists():
+            size = path.stat().st_size
+            state = f"{size // 1024}KB"
+        else:
+            state = "not pulled"
+        print(f"{name:<20} {device.get('hostname', '?'):<18} {device.get('driver', '?'):<18} {state}")
 
-    print(f"{'Device':<20} {'Driver':<18} {'Stacks':<40} {'Rendered'}")
-    print("-" * 90)
-
-    for device_name, device in inventory.items():
-        stacks = get_stacks_for_device(device_name)
-        stack_names = [s[0] for s in stacks]
-
-        device_rendered = RENDERED_DIR / device_name
-        rendered_files = list(device_rendered.glob("*.cfg")) if device_rendered.exists() else []
-
-        rendered_status = f"{len(rendered_files)} files" if rendered_files else "none"
-        stacks_str = ", ".join(stack_names) if stack_names else "(none)"
-
-        print(f"{device_name:<20} {device.get('driver', '?'):<18} {stacks_str:<40} {rendered_status}")
-
-
-# ---------------------------------------------------------------------------
-# Library
-# ---------------------------------------------------------------------------
 
 def cmd_library(args):
-    """List available service templates from the library."""
+    """Browse available service templates."""
     if not LIBRARY_DIR.exists():
         print("No library found.")
         return
 
-    services = []
-    for service_dir in sorted(LIBRARY_DIR.iterdir()):
-        if not service_dir.is_dir():
-            continue
-        schema_path = service_dir / "schema.yaml"
-        if schema_path.exists():
-            schema = load_yaml(schema_path)
-        else:
-            schema = {}
-
-        name = schema.get("name", service_dir.name)
-        desc = schema.get("description", "")
-        platforms = ", ".join(schema.get("platforms", []))
-        has_template = (service_dir / "template.j2").exists()
-
-        services.append((name, desc, platforms, has_template))
-
     if args.service:
-        # Show detail for one service
         service_dir = LIBRARY_DIR / args.service
         if not service_dir.exists():
-            print(f"Service '{args.service}' not found in library.")
+            print(f"Service '{args.service}' not found.")
             return 1
-
         schema_path = service_dir / "schema.yaml"
         if schema_path.exists():
-            schema = load_yaml(schema_path)
+            schema = yaml.safe_load(open(schema_path))
         else:
             schema = {}
 
         print(f"Service: {schema.get('name', args.service)}")
-        print(f"Description: {schema.get('description', '(none)')}")
+        print(f"Description: {schema.get('description', '')}")
         print(f"Platforms: {', '.join(schema.get('platforms', []))}")
         print()
-
-        variables = schema.get("variables", {})
-        if variables:
-            print("Variables:")
-            print(f"  {'Name':<25} {'Type':<10} {'Required':<10} Description")
-            print(f"  {'-'*25} {'-'*10} {'-'*10} {'-'*30}")
-            for var_name, var_def in variables.items():
-                if isinstance(var_def, dict):
-                    vtype = var_def.get("type", "?")
-                    req = "yes" if var_def.get("required") else "no"
-                    desc = var_def.get("description", "")
-                    print(f"  {var_name:<25} {vtype:<10} {req:<10} {desc}")
-        print()
-
-        # Show example if README exists
-        readme = service_dir / "README.md"
-        if readme.exists():
-            print(f"See library/{args.service}/README.md for full documentation.")
+        for var_name, var_def in schema.get("variables", {}).items():
+            if isinstance(var_def, dict):
+                req = "required" if var_def.get("required") else "optional"
+                print(f"  {var_name} ({var_def.get('type', '?')}, {req}): {var_def.get('description', '')}")
     else:
-        # List all services
-        print(f"{'Service':<20} {'Platforms':<25} Description")
-        print(f"{'-'*20} {'-'*25} {'-'*40}")
-        for name, desc, platforms, has_template in services:
-            status = "" if has_template else " (no template)"
-            print(f"{name:<20} {platforms:<25} {desc}{status}")
-
-    print()
+        print(f"{'Service':<25} {'Platforms':<25} Description")
+        print("-" * 80)
+        for d in sorted(LIBRARY_DIR.iterdir()):
+            if not d.is_dir():
+                continue
+            schema_path = d / "schema.yaml"
+            if schema_path.exists():
+                schema = yaml.safe_load(open(schema_path))
+            else:
+                schema = {}
+            name = schema.get("name", d.name)
+            platforms = ", ".join(schema.get("platforms", []))
+            desc = schema.get("description", "")
+            print(f"{name:<25} {platforms:<25} {desc}")
 
 
 # ---------------------------------------------------------------------------
-# Main CLI
+# Main
 # ---------------------------------------------------------------------------
 
 def main():
@@ -709,61 +374,42 @@ def main():
     )
     sub = parser.add_subparsers(dest="command")
 
-    # render
-    p = sub.add_parser("render", help="Render stack templates into device configs")
-    p.add_argument("--stack", nargs="*", help="Stack names to render (default: all)")
+    p = sub.add_parser("pull", help="Pull device config into configs/<device>.json")
+    p.add_argument("device", help="Device name from inventory")
 
-    # assemble
-    p = sub.add_parser("assemble", help="Assemble rendered fragments per device")
-    p.add_argument("--device", nargs="*", help="Device names (default: all)")
+    p = sub.add_parser("push", help="Push config file to device")
+    p.add_argument("device", help="Device name from inventory")
 
-    # lint
-    sub.add_parser("lint", help="Check for config conflicts between stacks")
+    p = sub.add_parser("diff", help="Compare config file vs live device")
+    p.add_argument("device", help="Device name from inventory")
 
-    # diff
-    p = sub.add_parser("diff", help="Show config diff on a device")
-    p.add_argument("device", help="Device name")
+    p = sub.add_parser("validate", help="Check if device matches config file")
+    p.add_argument("device", help="Device name from inventory")
 
-    # deploy
-    p = sub.add_parser("deploy", help="Deploy rendered config to a device")
-    p.add_argument("device", help="Device name")
-    p.add_argument("--dry-run", action="store_true", help="Preview only, don't commit")
+    p = sub.add_parser("show", help="Browse device config readably")
+    p.add_argument("device", help="Device name from inventory")
+    p.add_argument("section", nargs="?", help="Config section path (e.g. system/ntp)")
 
-    # validate
-    p = sub.add_parser("validate", help="Check if device matches rendered config")
-    p.add_argument("device", help="Device name")
+    sub.add_parser("status", help="Show all devices and config state")
 
-    # pull
-    p = sub.add_parser("pull", help="Pull running config from a device")
-    p.add_argument("device", help="Device name")
-
-    # status
-    sub.add_parser("status", help="Show device and stack status")
-
-    # library
-    p = sub.add_parser("library", help="Browse available service templates")
+    p = sub.add_parser("library", help="Browse service templates")
     p.add_argument("service", nargs="?", help="Service name for details")
 
     args = parser.parse_args()
-
-    if args.command is None:
+    if not args.command:
         parser.print_help()
         sys.exit(0)
 
-    cmd_map = {
-        "render": cmd_render,
-        "assemble": cmd_assemble,
-        "lint": cmd_lint,
-        "diff": cmd_diff,
-        "deploy": cmd_deploy,
-        "validate": cmd_validate,
+    cmds = {
         "pull": cmd_pull,
+        "push": cmd_push,
+        "diff": cmd_diff,
+        "validate": cmd_validate,
+        "show": cmd_show,
         "status": cmd_status,
         "library": cmd_library,
     }
-
-    result = cmd_map[args.command](args)
-    sys.exit(result or 0)
+    sys.exit(cmds[args.command](args) or 0)
 
 
 if __name__ == "__main__":
