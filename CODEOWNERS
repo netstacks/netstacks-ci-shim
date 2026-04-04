@@ -1,0 +1,24 @@
+# Device config ownership
+# PRs touching these files require approval from the listed team/user.
+
+# Core routers — requires senior network team approval
+configs/rr1-nyc.json     @netstacks/senior-network
+configs/p1-nyc.json      @netstacks/senior-network
+configs/p2-chi.json      @netstacks/senior-network
+configs/p3-ams.json      @netstacks/senior-network
+
+# PE routers — network team can approve
+configs/pe*.json         @netstacks/network-team
+
+# Customer switches — customer-ops team can approve
+configs/sw*.json         @netstacks/customer-ops
+
+# CE routers — customer-ops team
+configs/ce*.json         @netstacks/customer-ops
+
+# Inventory changes — senior only
+inventory.yaml           @netstacks/senior-network
+
+# Library and driver changes — platform team only
+library/**               @netstacks/platform-team
+drivers/**               @netstacks/platform-team
