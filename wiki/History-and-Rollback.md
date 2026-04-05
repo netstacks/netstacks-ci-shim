@@ -33,17 +33,15 @@ Shows the diff for version 0 (the most recent change) with color-coded lines:
 
 ## Rolling Back
 
-### Rollback and Push Immediately
+### Emergency: Fix the Device Now
 
 ```bash
 nsci rollback pe1-nyc 1 --push
 ```
 
-This does everything in one command:
-1. Restores the config file to version 1
-2. Creates a Git commit
-3. Pushes the old config to the device via gNMI (device is fixed immediately)
-4. Pushes the Git commit so the repo stays in sync
+This does two things:
+1. Restores `configs/pe1-nyc.json` to version 1
+2. Pushes the old config to the device via gNMI — **device is fixed immediately**
 
 ```
 Rolling back pe1-nyc to version 1:
@@ -55,49 +53,28 @@ Rolling back pe1-nyc to version 1:
 
 Pushing rollback to pe1-nyc...
   PUSHED to device — pe1-nyc restored to version 1
-  PUSHED to Git — repo is in sync
 ```
 
-**No `git commit`, no `git push`, no branch management.** One command.
+**The device is fixed.** That's what matters in an emergency.
 
-### What Happens With Branch Protection
+The Git repo still has the bad change on `main`. You fix that separately — see [Syncing Git After a Rollback](#syncing-git-after-a-rollback) below.
 
-If `main` has branch protection (which it should — see [[Branch Protection]]), direct pushes to `main` are blocked. `nsci` handles this automatically:
-
-1. The device gets the rollback immediately (gNMI push happens first)
-2. `nsci` tries `git push` to the current branch
-3. If blocked, it creates a `rollback/pe1-nyc-<timestamp>` branch and pushes there
-4. You merge the rollback branch into `main` via PR (the device is already fixed)
-
-```
-  PUSHED to device — pe1-nyc restored to version 1
-  PUSHED to Git branch: rollback/pe1-nyc-1775316537
-  Open a PR to merge the rollback into main.
-```
-
-**The device is fixed first, the paperwork follows.** In an emergency, the device is what matters. The Git history catches up when you merge the rollback PR.
-
-### Rollback the File Only (No Device Push)
+### Non-Emergency: Review Before Applying
 
 ```bash
 nsci rollback pe1-nyc 1
 ```
 
-Restores the config file locally without touching the device or Git remote. Use this when you want to review before applying:
+Restores the file locally without touching the device. Review it, then push when ready:
 
-```
-Config file rolled back (local only). Next steps:
-  nsci push pe1-nyc       ← apply to device now
-  git push                ← sync repo (CI will deploy)
+```bash
+nsci show pe1-nyc system/ntp     # check it looks right
+nsci push pe1-nyc                # push to device
 ```
 
 ### Rollback History is Preserved
 
 After a rollback, the history shows both the original change and the rollback:
-
-```bash
-nsci history pe1-nyc
-```
 
 ```
   0: abc1234  just now    Rollback pe1-nyc to version 2 (c6b2820)  (current)
@@ -106,59 +83,78 @@ nsci history pe1-nyc
   3: c6b2820  3 days ago  Initial pull from NetBox
 ```
 
-The rollback is a new commit, not a rewrite of history. You can always see what happened and even rollback a rollback.
+You can always see what happened and even rollback a rollback.
 
-## Emergency Rollback Workflow
+## Syncing Git After a Rollback
 
-Something broke. BGP sessions are down. You need to revert NOW.
+`nsci rollback --push` fixes the device instantly. But `main` on GitHub still has the bad change. The device and the repo are now out of sync. You need to fix the repo so CI doesn't redeploy the bad config.
+
+**Two options:**
+
+### Option A: Pull the device state into a PR
+
+The device is now correct (you just rolled it back). Pull its current config and push to main:
 
 ```bash
-# 1. See what changed recently
-nsci history pe1-nyc
-
-# 2. Rollback, push to device AND Git — one command
-nsci rollback pe1-nyc 1 --push
-
-# 3. Verify the device is back to normal
-nsci validate pe1-nyc
+nsci pull pe1-nyc                          # get current (rolled-back) state from device
+git checkout -b fix/rollback-pe1-nyc       # create a branch
+git add configs/pe1-nyc.json
+git commit -m "Sync pe1-nyc after emergency rollback"
+git push -u origin fix/rollback-pe1-nyc    # push branch, open PR, merge
 ```
 
-Three commands, under 30 seconds. The device is fixed at step 2. Step 3 is verification.
+This is the cleanest approach. The repo now matches the device.
 
-If branch protection is on, the Git push creates a rollback branch. Merge the PR later when things are calm. The device is already restored.
+### Option B: Revert the bad commit on GitHub
+
+Find the bad merge commit on GitHub and click "Revert" on the PR page. This creates a new PR that undoes the change. Merge it. CI deploys — but the device already has the right config, so the deploy is a no-op.
+
+### Why Not Auto-Push to Git?
+
+We deliberately don't auto-push to `main` because:
+- Branch protection blocks direct pushes (this is correct and should stay)
+- Auto-creating rollback branches that trigger CI on merge would re-deploy and potentially cause confusion
+- The device is the priority — fix the device first, fix the paperwork second
+
+## Emergency Rollback Workflow (Complete)
+
+```bash
+# 1. Something broke. Fix the device.
+nsci rollback pe1-nyc 1 --push
+
+# 2. Verify it's fixed.
+nsci validate pe1-nyc
+
+# 3. When things are calm, sync the repo.
+nsci pull pe1-nyc
+git checkout -b fix/rollback-pe1-nyc
+git add configs/pe1-nyc.json
+git commit -m "Sync pe1-nyc after emergency rollback"
+git push -u origin fix/rollback-pe1-nyc
+# Open PR, merge.
+```
+
+Steps 1-2: 30 seconds, device is fixed.
+Step 3: whenever you have time, no urgency.
 
 ## Multi-Device Rollback
 
-If a stack deploy went wrong and the automatic rollback didn't catch it:
-
 ```bash
+# Fix all devices
 nsci rollback pe1-nyc 1 --push
 nsci rollback pe2-nyc 1 --push
 nsci rollback ce1-nyc-globalbank 1 --push
-```
 
-Each command restores one device and syncs Git. All three devices are fixed independently.
+# Verify
+nsci validate pe1-nyc
+nsci validate pe2-nyc
 
-## Rollback With Review (Non-Emergency)
-
-When you have time and want to be careful:
-
-```bash
-# See history
-nsci history pe1-nyc
-
-# Check what version 2 looked like
-nsci history pe1-nyc --diff 2
-
-# Rollback file only (no device push)
-nsci rollback pe1-nyc 2
-
-# Review what you're about to push
-nsci show pe1-nyc system/ntp
-
-# Happy with it? Push to device
-nsci push pe1-nyc
-
-# Sync to Git
-git push
+# Sync repo later
+for device in pe1-nyc pe2-nyc ce1-nyc-globalbank; do
+  nsci pull "$device"
+done
+git checkout -b fix/rollback-l3vpn-cust-a
+git add configs/
+git commit -m "Sync after L3VPN rollback — BGP sessions not establishing"
+git push -u origin fix/rollback-l3vpn-cust-a
 ```

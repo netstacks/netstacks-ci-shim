@@ -657,23 +657,11 @@ def cmd_rollback(args):
             print(f"  Run 'nsci push {device_name}' to retry.")
             return 1
 
-        # Push to Git — try current branch first, fall back to rollback branch
-        _, rc = _git(["push"])
-        if rc == 0:
-            print(f"  PUSHED to Git — repo is in sync")
-        else:
-            # Direct push to main likely blocked by branch protection.
-            # Create a rollback branch and push there instead.
-            import time as _t
-            branch = f"rollback/{device_name}-{int(_t.time())}"
-            _git(["checkout", "-b", branch])
-            _, rc2 = _git(["push", "-u", "origin", branch])
-            _git(["checkout", "-"])  # go back to previous branch
-            if rc2 == 0:
-                print(f"  PUSHED to Git branch: {branch}")
-                print(f"  Open a PR to merge the rollback into main.")
-            else:
-                print(f"  Git push failed — run 'git push' manually to sync the repo")
+        # Sync Git repo
+        print()
+        print(f"  To sync the repo with the device:")
+        print(f"    git push                              ← if you're on main with no branch protection")
+        print(f"    nsci pull {device_name} && git push   ← or re-pull from the fixed device")
     else:
         print()
         print(f"Config file rolled back (local only). Next steps:")
