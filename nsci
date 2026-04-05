@@ -1,18 +1,12 @@
 #!/usr/bin/env python3
-"""netstacks-ci-shim: Git-native network config management.
+"""nsci - NetStacks CI
 
-Manage device configs as JSON files in a Git repo. Push via gNMI/NETCONF.
-The device handles the "how" — adds, removes, and modifications are all
-a single replace operation.
+Git-native network configuration management. Device configs live as
+structured JSON files in a Git repo. Changes are pushed to devices via
+gNMI, NETCONF, or REST APIs. The device handles the "how" — adds,
+removes, and modifications are all a single replace operation.
 
-Commands:
-    pull      - Pull device config into configs/<device>.json
-    push      - Push configs/<device>.json to the device
-    diff      - Compare local config file vs live device
-    show      - Browse device config in a readable format
-    validate  - Check if device matches the config file
-    status    - Show all devices and their config state
-    library   - Browse available service templates
+https://github.com/netstacks/netstacks-ci
 """
 
 import argparse
@@ -718,8 +712,8 @@ def cmd_library(args):
 
 def main():
     parser = argparse.ArgumentParser(
-        prog="shim",
-        description="netstacks-ci-shim: Git-native network config management",
+        prog="nsci",
+        description="NetStacks CI — Git-native network config management",
     )
     sub = parser.add_subparsers(dest="command")
 

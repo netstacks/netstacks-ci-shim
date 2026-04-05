@@ -56,7 +56,7 @@ jobs:
             if [ "$match" = true ]; then
               echo ""
               echo "=== Stack: $stack_name ==="
-              python3 shim stack-deploy "$stack_name"
+              python3 nsci stack-deploy "$stack_name"
               deployed_devices="$deployed_devices $stack_devices"
             fi
           done
@@ -66,6 +66,6 @@ jobs:
             if ! echo "$deployed_devices" | grep -qw "$device"; then
               echo ""
               echo "=== Independent: $device ==="
-              python3 shim push "$device"
+              python3 nsci push "$device"
             fi
           done

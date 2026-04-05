@@ -33,7 +33,7 @@ jobs:
           for device in ${{ steps.detect.outputs.devices }}; do
             echo "### $device" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
-            python3 shim diff "$device" 2>&1 >> $GITHUB_STEP_SUMMARY || echo "  (could not reach device for live diff)" >> $GITHUB_STEP_SUMMARY
+            python3 nsci diff "$device" 2>&1 >> $GITHUB_STEP_SUMMARY || echo "  (could not reach device for live diff)" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
           done
