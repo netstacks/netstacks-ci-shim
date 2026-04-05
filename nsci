@@ -551,8 +551,8 @@ def cmd_history(args):
         print(f"  {i}: {line}{marker}")
 
     print()
-    print(f"To rollback: ./shim rollback {device_name} <number>")
-    print(f"To see diff: ./shim history {device_name} --diff <number>")
+    print(f"To rollback: nsci rollback {device_name} <number>")
+    print(f"To see diff: nsci history {device_name} --diff <number>")
 
     # Show diff for a specific version if requested
     if args.diff is not None:
@@ -650,18 +650,36 @@ def cmd_rollback(args):
         config = json.loads(file_content)
         try:
             gnmi_push(device, config)
-            print(f"  PUSHED — {device_name} restored to version {version}")
+            print(f"  PUSHED to device — {device_name} restored to version {version}")
         except Exception as e:
             print(f"  PUSH FAILED: {e}")
             print(f"  Config file is rolled back but device was not updated.")
-            print(f"  Run './shim push {device_name}' to retry.")
+            print(f"  Run 'nsci push {device_name}' to retry.")
             return 1
+
+        # Push to Git — try current branch first, fall back to rollback branch
+        _, rc = _git(["push"])
+        if rc == 0:
+            print(f"  PUSHED to Git — repo is in sync")
+        else:
+            # Direct push to main likely blocked by branch protection.
+            # Create a rollback branch and push there instead.
+            import time as _t
+            branch = f"rollback/{device_name}-{int(_t.time())}"
+            _git(["checkout", "-b", branch])
+            _, rc2 = _git(["push", "-u", "origin", branch])
+            _git(["checkout", "-"])  # go back to previous branch
+            if rc2 == 0:
+                print(f"  PUSHED to Git branch: {branch}")
+                print(f"  Open a PR to merge the rollback into main.")
+            else:
+                print(f"  Git push failed — run 'git push' manually to sync the repo")
     else:
         print()
-        print(f"Config file rolled back. To apply to device:")
-        print(f"  ./shim push {device_name}")
-        print(f"Or push to git and let CI deploy:")
-        print(f"  git push")
+        print(f"Config file rolled back (local only). Next steps:")
+        print(f"  nsci push {device_name}       ← apply to device now")
+        print(f"  git push                       ← sync repo (CI will deploy)")
+        print(f"  nsci push ... && git push      ← both")
 
 
 def cmd_library(args):
