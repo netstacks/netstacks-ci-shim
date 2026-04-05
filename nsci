@@ -642,7 +642,7 @@ def cmd_rollback(args):
     _git(["commit", "-m", msg])
     print(f"  Committed: {msg}")
 
-    # Push to device if requested
+    # Push to device if requested (manual mode — engineer pushes directly)
     if args.push:
         print()
         print(f"Pushing rollback to {device_name}...")
@@ -656,18 +656,11 @@ def cmd_rollback(args):
             print(f"  Config file is rolled back but device was not updated.")
             print(f"  Run 'nsci push {device_name}' to retry.")
             return 1
-
-        # Sync Git repo
-        print()
-        print(f"  To sync the repo with the device:")
-        print(f"    git push                              ← if you're on main with no branch protection")
-        print(f"    nsci pull {device_name} && git push   ← or re-pull from the fixed device")
     else:
+        # CI mode — file is rolled back, commit to a branch, let CI deploy
         print()
-        print(f"Config file rolled back (local only). Next steps:")
-        print(f"  nsci push {device_name}       ← apply to device now")
-        print(f"  git push                       ← sync repo (CI will deploy)")
-        print(f"  nsci push ... && git push      ← both")
+        print(f"Config file restored to version {version}.")
+        print(f"Next: commit to a branch, open a PR, merge → CI deploys.")
 
 
 def cmd_library(args):
