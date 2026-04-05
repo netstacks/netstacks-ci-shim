@@ -31,12 +31,29 @@ Sections: acl, interfaces, network-instances, routing-policy, system
 
 ---
 
-### `nsci push <device>`
+### `nsci push <device> [device2 ...] --full-replace [--workers N] [--no-atomic]`
 
-Push `configs/<device>.json` to the device.
+Push `configs/<device>.json` to one or more devices. Requires `--full-replace` — this is a full config replace, and nsci makes you say so.
 
 ```bash
-nsci push pe1-nyc
+# Single device
+nsci push pe1-nyc --full-replace
+
+# Multiple devices (parallel, atomic by default)
+nsci push pe1-nyc pe2-nyc pe3-chi --full-replace
+
+# Multiple devices, non-atomic
+nsci push pe1-nyc pe2-nyc pe3-chi --full-replace --no-atomic
+
+# Control parallelism
+nsci push pe1-nyc pe2-nyc pe3-chi --full-replace --workers 20
+```
+
+**Without `--full-replace`:**
+```
+ERROR: full config replace requires --full-replace
+  This replaces the ENTIRE running config on the device.
+  If that's what you want: nsci push pe1-nyc --full-replace
 ```
 
 **What it does:**
@@ -44,17 +61,55 @@ nsci push pe1-nyc
 2. Connects to the device
 3. Sends a gNMI `Set` with `replace` on the root path
 4. The device reconciles its running config to match the file
+5. Pulls config back from the device and updates `configs/` (so the file matches actual device state)
+
+For multiple devices, adds pre-flight snapshots and atomic rollback (same stages as stack-deploy).
 
 **When to use:**
 - After editing a device's config file
 - To correct drift (device was changed outside of `nsci`)
 - To restore a rolled-back config
 
-**Output:**
+**Options (multi-device only):**
+
+| Flag | Default | Description |
+|---|---|---|
+| `--workers` | 10 | Number of parallel threads |
+| `--no-atomic` | false | Allow partial success (skip rollback) |
+
+**Output (single device):**
 ```
 Pushing config to pe1-nyc (10.1.1.104)...
-gNMI Set: REPLACE
-Device config replaced from configs/pe1-nyc.json
+  pe1-nyc: gNMI Set REPLACE
+  pe1-nyc: synced
+```
+
+**Output (multi-device):**
+```
+Full config replace to 3 devices (workers=3, atomic=True)
+  Devices: pe1-nyc, pe2-nyc, pe3-chi
+
+Pre-flight (saving rollback snapshots)...
+  pe1-nyc: OK (snapshot saved)
+  pe2-nyc: OK (snapshot saved)
+  pe3-chi: OK (snapshot saved)
+
+Pushing configs...
+  pe1-nyc: PUSHED
+  pe2-nyc: PUSHED
+  pe3-chi: PUSHED
+
+Validating...
+  pe1-nyc: IN SYNC
+  pe2-nyc: IN SYNC
+  pe3-chi: IN SYNC
+
+Syncing configs/...
+  pe1-nyc: synced
+  pe2-nyc: synced
+  pe3-chi: synced
+
+PUSH SUCCEEDED — 3 devices updated.
 ```
 
 **Exit code:** 0 on success, 1 on failure.
@@ -172,78 +227,98 @@ servers:
 
 ---
 
-## Multi-Device Operations
+## Stack Operations
 
-### `nsci deploy <device1> <device2> ... [--workers N] [--no-atomic]`
+### `nsci stack-render <stack-name> [--delete]`
 
-Deploy config to multiple devices in parallel with optional atomic rollback.
+Dry run — render all templates in a stack without pushing anything.
 
 ```bash
-# Atomic (default): all succeed or all roll back
-nsci deploy pe1-nyc pe2-nyc pe3-chi
+# Show what would be deployed
+nsci stack-render l3vpn-cust-a
 
-# Non-atomic: each device independent
-nsci deploy pe1-nyc pe2-nyc pe3-chi --no-atomic
-
-# Control parallelism
-nsci deploy pe1-nyc pe2-nyc pe3-chi --workers 20
+# Show what would be deleted
+nsci stack-render l3vpn-cust-a --delete
 ```
 
-**Stages:**
-
-| Stage | What Happens |
-|---|---|
-| Pre-flight | Pull current config from all devices (rollback snapshots) |
-| Push | Send new configs to all devices in parallel |
-| Validate | Verify all devices match expected state |
-| Rollback | If any failed AND `atomic=true`: restore ALL to pre-flight state |
-
-**Options:**
-
-| Flag | Default | Description |
-|---|---|---|
-| `--workers` | 10 | Number of parallel threads |
-| `--no-atomic` | false | Allow partial success (skip rollback) |
+**What it does:** Resolves all services × devices, renders Jinja2 templates, and displays the output. With `--delete`, shows per-item delete paths (gNMI) and XML with `nc:operation="delete"` (NETCONF).
 
 **Output:**
 ```
-Deploy to 3 devices (workers=3, atomic=True)
-  Devices: pe1-nyc, pe2-nyc, pe3-chi
+Stack: l3vpn-cust-a
+...
+[bgp-neighbor] → pe1-nyc (driver=eos-gnmi, template=bgp-neighbor/template.json.j2)
+  target: /openconfig-network-instance:.../bgp (merge)
+  { "global": { "config": { "as": 65000 ... } } }
+```
 
-Stage 1: Pre-flight (saving rollback snapshots)...
-  pe1-nyc: OK (snapshot saved)
-  pe2-nyc: OK (snapshot saved)
-  pe3-chi: OK (snapshot saved)
-
-Stage 2: Pushing configs...
-  pe1-nyc: PUSHED
-  pe2-nyc: PUSHED
-  pe3-chi: PUSHED
-
-Stage 3: Validating...
-  pe1-nyc: IN SYNC
-  pe2-nyc: IN SYNC
-  pe3-chi: IN SYNC
-
-DEPLOY SUCCEEDED — 3 devices updated.
+**With `--delete`:**
+```
+Stack: l3vpn-cust-a (DELETE)
+...
+[bgp-neighbor] → pe1-nyc (driver=eos-gnmi, template=bgp-neighbor/template.json.j2)
+  gNMI SET DELETE /.../bgp/neighbors/neighbor[neighbor-address=10.255.0.2]
 ```
 
 ---
 
 ### `nsci stack-deploy <stack-name>`
 
-Deploy a named stack from `stacks/<name>/stack.yaml`.
+Deploy a named stack: render → pre-flight → push → validate → confirm → sync.
 
 ```bash
 nsci stack-deploy l3vpn-cust-a
 ```
 
-**What it does:** Reads the stack definition and calls `deploy` with the stack's device list, atomic setting, and worker count.
+**What it does:**
 
-**Equivalent to:**
+| Stage | What Happens |
+|---|---|
+| Render | Resolve all services × devices, render Jinja2 templates |
+| Pre-flight | Pull current config from each device (rollback snapshots) |
+| Push | Send rendered templates (serialized per device, parallel across devices) |
+| Validate | Deep-compare rendered config against live device state |
+| Confirm | Send confirming commit to NETCONF commit-confirm devices |
+| Sync | Pull full config back from each device, save to `configs/` |
+
+---
+
+### `nsci stack-delete <stack-name>`
+
+Remove all config deployed by a stack. Uses the same `stack.yaml` — no extra files needed.
+
 ```bash
-# stacks/l3vpn-cust-a/stack.yaml has: atomic=true, devices=[pe1-nyc, pe2-nyc, ce1-nyc]
-nsci deploy pe1-nyc pe2-nyc ce1-nyc-globalbank --workers 3
+nsci stack-delete l3vpn-cust-a
+```
+
+**What it does:**
+
+| Stage | What Happens |
+|---|---|
+| Resolve | Render templates to determine what was deployed |
+| Delete | Remove per-item: gNMI `Set delete`, NETCONF `nc:operation="delete"` |
+| Confirm | Send confirming commit to NETCONF commit-confirm devices |
+| Sync | Pull full config back, save to `configs/` |
+
+**How delete works by transport:**
+
+- **gNMI (OpenConfig):** Walks rendered JSON, builds per-list-item delete paths. `DELETE .../neighbor[neighbor-address=X]` — only that neighbor is removed.
+- **NETCONF (OpenConfig):** Injects `nc:operation="delete"` on list item elements (`<static>`, `<neighbor>`, `<server>`, etc.).
+- **NETCONF (vendor-native):** Swaps all `nc:operation="replace"` and `nc:operation="merge"` to `nc:operation="delete"`. Template creators must use explicit `nc:operation` on every operational element.
+
+**Output:**
+```
+Stack: l3vpn-cust-a (DELETE)
+...
+  [bgp-neighbor] → pe1-nyc: DELETE .../neighbor[neighbor-address=10.255.0.2]
+  [bgp-import-policy] → pe1-nyc: DELETE .../community-set[name=CUST-A-COMMS]
+  [bgp-import-policy] → pe1-nyc: DELETE .../policy-definition[name=CUST-A-IMPORT]
+  [ntp] → pe1-nyc: DELETE .../server[address=10.0.0.1]
+  ...
+  6 deletions planned
+
+DELETE COMPLETE — l3vpn-cust-a
+  6 services removed from 2 devices
 ```
 
 ---
@@ -299,23 +374,24 @@ To see diff: nsci history pe1-nyc --diff <number>
 
 ---
 
-### `nsci rollback <device> <version> [--push]`
+### `nsci rollback <device> <version> [--no-push]`
 
-Rollback a device's config file to a previous version.
+Rollback a device to a previous config version. Pushes to the device by default.
 
 ```bash
-# Rollback file only (doesn't push to device)
+# Rollback file AND push to device (default)
 nsci rollback pe1-nyc 1
 
-# Rollback file AND push to device immediately
-nsci rollback pe1-nyc 1 --push
+# Rollback file only — don't touch the device
+nsci rollback pe1-nyc 1 --no-push
 ```
 
 **What it does:**
 1. Reads the git history for `configs/<device>.json`
 2. Restores the file to the specified version
 3. Creates a git commit recording the rollback
-4. Optionally pushes the rolled-back config to the device
+4. Pushes the rolled-back config to the device
+5. Syncs `configs/` back from the device (so the file matches actual device state)
 
 **Output:**
 ```
@@ -328,11 +404,12 @@ Rolling back pe1-nyc to version 1:
 
 Pushing rollback to pe1-nyc...
   PUSHED — pe1-nyc restored to version 1
+  Synced configs/pe1-nyc.json with live device
 ```
 
-**Without `--push`:** The file is restored and committed, but not pushed to the device. You can review the rollback, then either:
+**With `--no-push`:** The file is restored and committed, but the device is not touched. Use this when you want to review the rollback first, then either:
 - `nsci push pe1-nyc` to apply it manually
-- `git push` to trigger CI auto-deploy
+- Open a PR, merge → CI deploys
 
 ---
 

@@ -151,19 +151,71 @@ baseline-ntp              no         9        NTP server standardization
 l3vpn-cust-a              yes        3        L3VPN service for Customer A
 ```
 
-## Ad-Hoc Multi-Device Deploy
-
-You don't need a stack for one-time multi-device operations:
+## Deleting a Stack
 
 ```bash
-# Atomic (default)
-nsci deploy pe1-nyc pe2-nyc pe3-chi
-
-# Non-atomic
-nsci deploy pe1-nyc pe2-nyc pe3-chi --no-atomic
-
-# More parallelism
-nsci deploy pe1-nyc pe2-nyc pe3-chi --workers 20
+nsci stack-delete l3vpn-cust-a
 ```
 
-The difference: stacks are saved as files in the repo (permanent, CI-aware). Ad-hoc deploys are one-time commands.
+Removes all config deployed by a stack. Uses the same `stack.yaml` and the same deploy templates — no separate delete templates needed.
+
+### Stages
+
+| Stage | What Happens |
+|---|---|
+| Resolve | Render templates to determine what was deployed |
+| Delete | Remove per-item: gNMI `Set delete`, NETCONF `nc:operation="delete"` |
+| Confirm | Send confirming commit to NETCONF commit-confirm devices |
+| Sync | Pull full config back from each device, save to `configs/` |
+
+### How Delete Works by Transport
+
+- **gNMI (OpenConfig):** Walks rendered JSON, builds per-list-item delete paths. `DELETE .../neighbor[neighbor-address=X]` — only that neighbor is removed.
+- **gNMI (vendor-native):** Falls back to deleting the entire schema base path. **No per-item precision** — the whole subtree under the schema path is removed. This is a known gap for vendor-specific services on gNMI.
+- **NETCONF (OpenConfig):** Injects `nc:operation="delete"` on list item elements (`<static>`, `<neighbor>`, `<server>`, etc.).
+- **NETCONF (vendor-native):** Swaps all `nc:operation="replace"` and `nc:operation="merge"` to `nc:operation="delete"`. Template creators must use explicit `nc:operation` on every operational element.
+
+### Dry Run
+
+Preview what a delete would do without touching devices:
+
+```bash
+nsci stack-render l3vpn-cust-a --delete
+```
+
+### Output
+
+```
+Stack: l3vpn-cust-a (DELETE)
+...
+  [bgp-neighbor] → pe1-nyc: DELETE .../neighbor[neighbor-address=10.255.0.2]
+  [bgp-import-policy] → pe1-nyc: DELETE .../community-set[name=CUST-A-COMMS]
+  [bgp-import-policy] → pe1-nyc: DELETE .../policy-definition[name=CUST-A-IMPORT]
+  [ntp] → pe1-nyc: DELETE .../server[address=10.0.0.1]
+  ...
+  6 deletions planned
+
+DELETE COMPLETE — l3vpn-cust-a
+  6 services removed from 2 devices
+```
+
+---
+
+## Ad-Hoc Multi-Device Push
+
+You don't need a stack for one-time multi-device operations. `nsci push` accepts multiple devices:
+
+```bash
+# Atomic (default) — all succeed or all roll back
+nsci push pe1-nyc pe2-nyc pe3-chi --full-replace
+
+# Non-atomic — each device independent
+nsci push pe1-nyc pe2-nyc pe3-chi --full-replace --no-atomic
+
+# More parallelism
+nsci push pe1-nyc pe2-nyc pe3-chi --full-replace --workers 20
+```
+
+`--full-replace` is required — this is a full config replace and nsci makes you say so.
+
+The difference: stacks render templates and push partial config. `nsci push --full-replace` pushes the entire `configs/<device>.json` file. Stacks are saved in the repo (permanent, CI-aware). Ad-hoc pushes are one-time commands.

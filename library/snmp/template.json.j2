@@ -1,0 +1,19 @@
+{
+  "config": {
+    "contact": "{{ snmp_contact }}",
+    "location": "{{ snmp_location }}"
+  },
+  "snmp": {
+    "communities": {
+      "community": [
+        {
+          "name": "{{ snmp_community }}",
+          "config": {
+            "name": "{{ snmp_community }}",
+            "access": "{{ snmp_community_access | upper }}"
+          }
+        }
+      ]
+    }
+  }
+}

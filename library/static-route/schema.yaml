@@ -1,0 +1,42 @@
+# Service: static-route
+# Stack references this as: service: static-route
+# Templates are selected by device driver (platform + transport)
+
+name: static-route
+description: Static route configuration
+
+path: /openconfig-network-instance:network-instances/network-instance[name={{ network_instance | default('default') }}]/protocols/protocol[identifier=STATIC][name=STATIC]/static-routes
+
+templates:
+  json: template.json.j2
+  xml: template.xml.j2
+
+variables:
+  network_instance:
+    type: string
+    required: false
+    scope: device
+    description: Network instance / VRF name (defaults to 'default' for global table)
+    default: "default"
+    example: "CUST-A-VRF"
+
+  routes:
+    type: list
+    required: true
+    scope: device
+    description: Static routes to configure
+    items:
+      prefix:
+        type: string
+        required: true
+        description: Destination prefix (CIDR notation)
+        example: "10.200.1.0/24"
+      next_hop:
+        type: string
+        required: true
+        description: Next-hop IP address
+        example: "172.16.0.2"
+      description:
+        type: string
+        required: false
+        description: Route description

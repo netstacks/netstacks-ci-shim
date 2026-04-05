@@ -1,0 +1,17 @@
+<system xmlns="http://openconfig.net/yang/system" xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0">
+  <config>
+    <contact>{{ snmp_contact }}</contact>
+    <location>{{ snmp_location }}</location>
+  </config>
+  <snmp nc:operation="replace">
+    <communities>
+      <community>
+        <name>{{ snmp_community }}</name>
+        <config>
+          <name>{{ snmp_community }}</name>
+          <access>{{ snmp_community_access | upper }}</access>
+        </config>
+      </community>
+    </communities>
+  </snmp>
+</system>

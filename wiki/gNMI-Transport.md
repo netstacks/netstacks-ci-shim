@@ -152,6 +152,38 @@ gNMI is fast:
 
 For 10 parallel pushes with `nsci deploy`, total time is typically 5-10 seconds (limited by the slowest device, not the protocol).
 
+## Origin Prefix Stripping
+
+Some devices (notably Arista EOS) reject gNMI `Set` requests that include YANG module origin prefixes in the path. For example, `/openconfig-system:system/ntp` gets rejected — the device wants `/system/ntp`.
+
+nsci automatically strips origin prefixes from all gNMI paths before sending them to devices. The first path element's module prefix (e.g., `openconfig-system:`) is removed. This is transparent — you never need to worry about it in templates or schema paths.
+
+## Stack Delete (gNMI)
+
+When `nsci stack-delete` removes config via gNMI:
+
+### OpenConfig Services — Per-Item Precision
+
+nsci walks the rendered JSON and builds individual `Set delete` paths for each list item:
+
+```
+DELETE /network-instances/network-instance[name=default]/protocols/protocol[identifier=BGP][name=BGP]/bgp/neighbors/neighbor[neighbor-address=10.255.0.2]
+DELETE /system/ntp/servers/server[address=10.0.0.1]
+DELETE /routing-policy/defined-sets/bgp-defined-sets/community-sets/community-set[community-set-name=CUST-A-COMMS]
+```
+
+Only the specific list items are removed. Pre-existing config on the device is untouched.
+
+### Vendor-Specific Services — Base Path Delete (Known Gap)
+
+For non-OpenConfig services deployed via gNMI, nsci cannot build per-item delete paths because it doesn't know the vendor-specific YANG list key structure. It falls back to deleting the **entire schema base path**.
+
+This means: if the schema path is `/junos-conf:configuration/firewall`, a `stack-delete` removes everything under `/configuration/firewall` — not just the filter the stack created.
+
+**This is a known architectural gap.** Vendor-specific services that need surgical delete precision should use NETCONF transport, where the `nc:operation` swap mechanism provides per-element control.
+
+---
+
 ## Troubleshooting
 
 **Connection timeout:**

@@ -12,3 +12,8 @@ capabilities:
   session_diff: true
   json_output: true
   config_replace: true
+  commit_confirm: true
+  commit_confirm_timeout: 120
+
+# EOS eAPI supports commit-confirm via config sessions:
+#   configure session → changes → commit timer <seconds> → validate → commit

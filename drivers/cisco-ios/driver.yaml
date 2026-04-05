@@ -1,0 +1,15 @@
+name: cisco-ios
+transport: netconf
+platform: ios
+
+netconf:
+  port: 830
+  hostkey_verify: false
+
+capabilities:
+  config_replace: false
+  openconfig: false
+  commit_confirm: false
+
+# Cisco IOS NETCONF does not support candidate datastore or commit-confirm.
+# Changes go directly to running config.

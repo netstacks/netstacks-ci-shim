@@ -2929,76 +2929,9 @@
               "bgp": {
                 "global": {
                   "config": {
-                    "as": 4444,
-                    "router-id": "10.255.0.32"
+                    "as": 65000,
+                    "router-id": "10.255.0.2"
                   }
-                },
-                "neighbors": {
-                  "neighbor": [
-                    {
-                      "afi-safis": {
-                        "afi-safi": [
-                          {
-                            "afi-safi-name": "arista-bgp-augments:IPV4_MULTICAST",
-                            "config": {
-                              "afi-safi-name": "arista-bgp-augments:IPV4_MULTICAST"
-                            }
-                          },
-                          {
-                            "afi-safi-name": "arista-bgp-augments:IPV6_MULTICAST",
-                            "config": {
-                              "afi-safi-name": "arista-bgp-augments:IPV6_MULTICAST"
-                            }
-                          },
-                          {
-                            "afi-safi-name": "openconfig-bgp-types:IPV4_UNICAST",
-                            "config": {
-                              "afi-safi-name": "openconfig-bgp-types:IPV4_UNICAST",
-                              "enabled": true
-                            }
-                          },
-                          {
-                            "afi-safi-name": "openconfig-bgp-types:IPV6_UNICAST",
-                            "config": {
-                              "afi-safi-name": "openconfig-bgp-types:IPV6_UNICAST"
-                            }
-                          },
-                          {
-                            "afi-safi-name": "openconfig-bgp-types:L2VPN_EVPN",
-                            "config": {
-                              "afi-safi-name": "openconfig-bgp-types:L2VPN_EVPN"
-                            }
-                          },
-                          {
-                            "afi-safi-name": "openconfig-bgp-types:L3VPN_IPV4_UNICAST",
-                            "config": {
-                              "afi-safi-name": "openconfig-bgp-types:L3VPN_IPV4_UNICAST",
-                              "enabled": true
-                            }
-                          }
-                        ]
-                      },
-                      "config": {
-                        "description": "RR1-NYC",
-                        "neighbor-address": "10.255.0.1",
-                        "peer-as": 4444,
-                        "send-community-type": [
-                          "EXTENDED"
-                        ]
-                      },
-                      "ebgp-multihop": {
-                        "config": {
-                          "multihop-ttl": 0
-                        }
-                      },
-                      "neighbor-address": "10.255.0.1",
-                      "transport": {
-                        "config": {
-                          "local-address": "Loopback0"
-                        }
-                      }
-                    }
-                  ]
                 }
               },
               "config": {

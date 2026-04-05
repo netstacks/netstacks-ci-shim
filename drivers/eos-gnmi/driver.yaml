@@ -10,3 +10,7 @@ gnmi:
 capabilities:
   config_replace: true
   openconfig: true
+  commit_confirm: false
+
+# EOS gNMI does not support commit-confirm natively.
+# For commit-confirm behavior on EOS, use eos-eapi driver with config sessions.

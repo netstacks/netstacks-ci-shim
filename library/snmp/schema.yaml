@@ -1,23 +1,35 @@
+# Service: snmp
+# Stack references this as: service: snmp
+# Templates are selected by device driver (platform + transport)
+
 name: snmp
 description: SNMP monitoring configuration
-platforms: [eos, ios]
+
+path: /openconfig-system:system
+
+templates:
+  json: template.json.j2        # gNMI (OpenConfig JSON)
+  xml: template.xml.j2          # NETCONF (OpenConfig XML)
 
 variables:
   snmp_contact:
     type: string
     required: true
+    scope: shared
     description: SNMP contact name
     example: "netops-team"
 
   snmp_location:
     type: string
     required: true
+    scope: device
     description: Device physical location
     example: "NYC-DC1-Row3-Rack12"
 
   snmp_community:
     type: string
     required: true
+    scope: shared
     description: SNMP community string
     sensitive: true
     example: "my_community"
@@ -25,6 +37,7 @@ variables:
   snmp_community_access:
     type: string
     required: true
+    scope: shared
     description: Access level
     choices: [ro, rw]
     default: ro

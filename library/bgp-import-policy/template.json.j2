@@ -1,0 +1,64 @@
+{
+  "defined-sets": {
+    "openconfig-bgp-policy:bgp-defined-sets": {
+      "community-sets": {
+        "community-set": [
+          {%- for comm_list in community_lists %}
+          {
+            "community-set-name": "{{ comm_list.name }}",
+            "config": {
+              "community-set-name": "{{ comm_list.name }}",
+              "community-member": {{ comm_list.members | tojson }}
+            }
+          }{% if not loop.last %},{% endif %}
+          {%- endfor %}
+        ]
+      }
+    }
+  },
+  "policy-definitions": {
+    "policy-definition": [
+      {
+        "name": "{{ policy_name }}",
+        "config": {
+          "name": "{{ policy_name }}"
+        },
+        "statements": {
+          "statement": [
+            {%- for statement in statements %}
+            {
+              "name": "{{ statement.sequence }}",
+              "config": {
+                "name": "{{ statement.sequence }}"
+              }
+              {%- if statement.get('match_community') %},
+              "conditions": {
+                "openconfig-bgp-policy:bgp-conditions": {
+                  "match-community-set": {
+                    "config": {
+                      "community-set": "{{ statement.match_community }}"
+                    }
+                  }
+                }
+              }
+              {%- endif %},
+              "actions": {
+                "config": {
+                  "policy-result": "{{ 'ACCEPT_ROUTE' if statement.action == 'permit' else 'REJECT_ROUTE' }}"
+                }
+                {%- if statement.get('set_local_pref') %},
+                "openconfig-bgp-policy:bgp-actions": {
+                  "config": {
+                    "set-local-pref": {{ statement.set_local_pref }}
+                  }
+                }
+                {%- endif %}
+              }
+            }{% if not loop.last %},{% endif %}
+            {%- endfor %}
+          ]
+        }
+      }
+    ]
+  }
+}

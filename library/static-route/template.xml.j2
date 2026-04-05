@@ -1,0 +1,22 @@
+<static-routes xmlns="http://openconfig.net/yang/local-routing">
+  {%- for route in routes %}
+  <static>
+    <prefix>{{ route.prefix }}</prefix>
+    <config>
+      <prefix>{{ route.prefix }}</prefix>
+      {%- if route.get('description') %}
+      <description>{{ route.description }}</description>
+      {%- endif %}
+    </config>
+    <next-hops>
+      <next-hop>
+        <index>{{ route.next_hop }}</index>
+        <config>
+          <index>{{ route.next_hop }}</index>
+          <next-hop>{{ route.next_hop }}</next-hop>
+        </config>
+      </next-hop>
+    </next-hops>
+  </static>
+  {%- endfor %}
+</static-routes>

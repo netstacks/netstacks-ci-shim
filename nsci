@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# PYTHON_ARGCOMPLETE_OK
 """nsci - NetStacks CI
 
 Git-native network configuration management. Device configs live as
@@ -10,12 +11,15 @@ https://github.com/netstacks/netstacks-ci
 """
 
 import argparse
+import concurrent.futures
 import json
 import subprocess
 import sys
 from pathlib import Path
 
+from markupsafe import Markup
 import yaml
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 REPO_ROOT = Path(__file__).resolve().parent
 INVENTORY_FILE = REPO_ROOT / "inventory.yaml"
@@ -23,10 +27,37 @@ CONFIGS_DIR = REPO_ROOT / "configs"
 STACKS_DIR = REPO_ROOT / "stacks"
 LIBRARY_DIR = REPO_ROOT / "library"
 DRIVERS_DIR = REPO_ROOT / "drivers"
+SNAPSHOTS_DIR = REPO_ROOT / "snapshots"
 
 
 # ---------------------------------------------------------------------------
-# Inventory
+# Tab completion (argcomplete)
+# ---------------------------------------------------------------------------
+
+def _complete_devices(**kwargs):
+    try:
+        inv = yaml.safe_load(open(INVENTORY_FILE))
+        return sorted(inv.get("devices", {}).keys())
+    except Exception:
+        return []
+
+
+def _complete_stacks(**kwargs):
+    try:
+        return sorted(d.name for d in STACKS_DIR.iterdir() if d.is_dir())
+    except Exception:
+        return []
+
+
+def _complete_services(**kwargs):
+    try:
+        return sorted(d.name for d in LIBRARY_DIR.iterdir() if d.is_dir())
+    except Exception:
+        return []
+
+
+# ---------------------------------------------------------------------------
+# Inventory & Drivers
 # ---------------------------------------------------------------------------
 
 def load_inventory():
@@ -40,6 +71,127 @@ def get_device(name):
         print(f"Error: device '{name}' not in inventory")
         sys.exit(1)
     return inv[name]
+
+
+TRANSPORT_FORMAT = {
+    "gnmi": "json",
+    "netconf": "xml",
+    "rest_api": "rest",
+    "eapi": "json",
+}
+
+
+def load_driver(driver_name):
+    """Load a driver definition from drivers/."""
+    driver_path = DRIVERS_DIR / driver_name / "driver.yaml"
+    if not driver_path.exists():
+        return None
+    with open(driver_path) as f:
+        return yaml.safe_load(f)
+
+
+def get_transport(device_name):
+    """Get the transport type for a device."""
+    device = get_device(device_name)
+    driver = load_driver(device["driver"])
+    if not driver:
+        return None
+    return driver["transport"]
+
+
+# ---------------------------------------------------------------------------
+# Template resolution & rendering
+# ---------------------------------------------------------------------------
+
+def resolve_template(service_name, driver_name, operation="merge"):
+    """Pick the right template for a service + driver combo.
+
+    For delete operations, lookup order:
+      1. delete.{platform}.{format}.j2  (vendor-specific delete)
+      2. delete.{format}.j2             (generic delete)
+      3. Falls through to standard templates if no delete template exists
+
+    Standard lookup order:
+      1. template.{platform}.{format}.j2  (vendor-specific)
+      2. template.{format}.j2             (generic OpenConfig)
+
+    Returns (template_path, None) or (None, error_string).
+    """
+    driver = load_driver(driver_name)
+    if not driver:
+        return None, f"driver '{driver_name}' not found in drivers/"
+    platform = driver["platform"]
+    transport = driver["transport"]
+    fmt = TRANSPORT_FORMAT.get(transport)
+    if not fmt:
+        return None, f"unknown transport '{transport}' for driver '{driver_name}'"
+
+    service_dir = LIBRARY_DIR / service_name
+
+    # For delete operations, try delete-specific templates first
+    if operation == "delete":
+        del_specific = service_dir / f"delete.{platform}.{fmt}.j2"
+        if del_specific.exists():
+            return del_specific, None
+        del_generic = service_dir / f"delete.{fmt}.j2"
+        if del_generic.exists():
+            return del_generic, None
+        # No delete template — fall through to deploy template
+        # OpenConfig: nsci auto-injects nc:operation="delete" on list items
+        # Vendor-native: nsci swaps existing nc:operation values to "delete"
+
+    # Try platform-specific first
+    specific = service_dir / f"template.{platform}.{fmt}.j2"
+    if specific.exists():
+        return specific, None
+
+    # Fall back to generic
+    generic = service_dir / f"template.{fmt}.j2"
+    if generic.exists():
+        return generic, None
+
+    return None, f"no {fmt} template for service '{service_name}' (tried {specific.name}, {generic.name})"
+
+
+def load_schema(service_name):
+    """Load a service schema from library/."""
+    schema_path = LIBRARY_DIR / service_name / "schema.yaml"
+    if not schema_path.exists():
+        return None
+    with open(schema_path) as f:
+        return yaml.safe_load(f)
+
+
+def validate_variables(schema, variables, device_name=None):
+    """Validate variables against a schema. Returns list of errors."""
+    errors = []
+    schema_vars = schema.get("variables", {})
+    for var_name, var_def in schema_vars.items():
+        if not isinstance(var_def, dict):
+            continue
+        if var_def.get("required") and var_name not in variables:
+            scope = var_def.get("scope", "shared")
+            if device_name and scope == "shared":
+                continue  # shared vars checked separately
+            errors.append(f"missing required variable '{var_name}'" +
+                          (f" for {device_name}" if device_name else ""))
+    return errors
+
+
+def render_template(template_path, variables):
+    """Render a Jinja2 template with the given variables.
+
+    XML templates (.xml.j2) get automatic escaping of &, <, >, " in variables.
+    JSON and other templates render without escaping.
+    """
+    template_path = Path(template_path)
+    is_xml = template_path.name.endswith(".xml.j2")
+    env = Environment(
+        loader=FileSystemLoader(str(template_path.parent)),
+        autoescape=is_xml,
+    )
+    tmpl = env.get_template(template_path.name)
+    return tmpl.render(**variables)
 
 
 # ---------------------------------------------------------------------------
@@ -73,11 +225,303 @@ def gnmi_push(device, config):
         return result
 
 
+def _gnmi_strip_origin(path):
+    """Strip YANG module origin prefix from gNMI path.
+
+    Arista (and others) reject Set requests with origin-prefixed paths like
+    'openconfig-system:system/ntp'. Convert to '/system/ntp' by stripping
+    the 'module-name:' prefix from the first path element.
+    """
+    path = path.lstrip("/")
+    parts = path.split("/", 1)
+    if ":" in parts[0]:
+        parts[0] = parts[0].split(":", 1)[1]
+    return "/" + "/".join(parts)
+
+
+def gnmi_replace_path(device, path, config):
+    """Replace a specific config section via gNMI Set replace at path."""
+    with gnmi_connect(device) as gc:
+        result = gc.set(replace=[(_gnmi_strip_origin(path), config)], encoding="json_ietf")
+        return result
+
+
+def gnmi_update_path(device, path, config):
+    """Merge config into a section via gNMI Set update at path."""
+    with gnmi_connect(device) as gc:
+        result = gc.set(update=[(_gnmi_strip_origin(path), config)], encoding="json_ietf")
+        return result
+
+
+def gnmi_delete_path(device, path):
+    """Delete a config section via gNMI Set delete at path."""
+    with gnmi_connect(device) as gc:
+        result = gc.set(delete=[_gnmi_strip_origin(path)], encoding="json_ietf")
+        return result
+
+
 def gnmi_get_section(device, path):
     """Pull a specific config section via gNMI Get."""
     with gnmi_connect(device) as gc:
-        result = gc.get(path=[path], datatype="config", encoding="json_ietf")
+        result = gc.get(path=[_gnmi_strip_origin(path)], datatype="config", encoding="json_ietf")
         return result["notification"][0]["update"][0]["val"]
+
+
+# ---------------------------------------------------------------------------
+# NETCONF transport
+# ---------------------------------------------------------------------------
+
+def netconf_connect(device):
+    from ncclient import manager
+    driver = load_driver(device["driver"])
+    nc_config = driver.get("netconf", {}) if driver else {}
+    cred = device["credential"]
+    return manager.connect(
+        host=device["hostname"],
+        port=nc_config.get("port", 830),
+        username=cred["username"],
+        password=cred["password"],
+        hostkey_verify=nc_config.get("hostkey_verify", False),
+    )
+
+
+def _netconf_has_commit_confirm(device):
+    """Check if device driver supports commit-confirm."""
+    driver = load_driver(device["driver"])
+    if not driver:
+        return False, 0
+    caps = driver.get("capabilities", {})
+    supported = caps.get("commit_confirm", False)
+    timeout = caps.get("commit_confirm_timeout", 120)
+    has_candidate = caps.get("candidate_datastore", False)
+    return supported and has_candidate, timeout
+
+
+def netconf_pull(device):
+    """Pull full config from device via NETCONF get-config."""
+    with netconf_connect(device) as m:
+        result = m.get_config(source="running")
+        return result.data_xml
+
+
+def netconf_push(device, xml_config):
+    """Push full config to device via NETCONF edit-config (replace).
+
+    Uses commit-confirm if the device supports it:
+      1. Lock candidate → edit-config → confirmed commit (timeout)
+      2. Caller validates → netconf_commit_confirm() to finalize
+      3. If caller doesn't confirm, device auto-rolls back after timeout
+    Without commit-confirm: edit-config directly on running.
+    """
+    commit_confirm, timeout = _netconf_has_commit_confirm(device)
+
+    if commit_confirm:
+        with netconf_connect(device) as m:
+            m.lock("candidate")
+            try:
+                m.discard_changes()
+                m.edit_config(
+                    target="candidate",
+                    config=xml_config,
+                    default_operation="replace",
+                )
+                m.commit(confirmed=True, timeout=str(timeout))
+                return {"confirmed_commit": True, "timeout": timeout, "session": None}
+            except Exception:
+                m.discard_changes()
+                m.unlock("candidate")
+                raise
+    else:
+        with netconf_connect(device) as m:
+            result = m.edit_config(
+                target="running",
+                config=xml_config,
+                default_operation="replace",
+            )
+            return {"confirmed_commit": False}
+
+
+def netconf_update(device, xml_config):
+    """Push partial config to device via NETCONF edit-config.
+
+    The XML template includes nc:operation="replace" on the root element,
+    so the device replaces that entire section (not just merge).
+
+    Uses commit-confirm if the device supports it:
+      1. Lock candidate → edit-config → commit confirmed (timer starts)
+      2. Caller validates → netconf_confirm() to finalize
+      3. If caller doesn't confirm, device auto-rolls back after timeout
+    """
+    commit_confirm, timeout = _netconf_has_commit_confirm(device)
+
+    if commit_confirm:
+        with netconf_connect(device) as m:
+            m.lock("candidate")
+            try:
+                m.discard_changes()
+                m.edit_config(
+                    target="candidate",
+                    config=xml_config,
+                )
+                m.commit(confirmed=True, timeout=str(timeout))
+                return {"confirmed_commit": True, "timeout": timeout}
+            except Exception:
+                m.discard_changes()
+                m.unlock("candidate")
+                raise
+    else:
+        with netconf_connect(device) as m:
+            result = m.edit_config(
+                target="running",
+                config=xml_config,
+            )
+            return {"confirmed_commit": False}
+
+
+def netconf_confirm(device):
+    """Send confirming commit to finalize a confirmed-commit."""
+    with netconf_connect(device) as m:
+        m.commit()
+        m.unlock("candidate")
+
+
+# ---------------------------------------------------------------------------
+# Transport-agnostic operations
+# ---------------------------------------------------------------------------
+
+def transport_pull(device_name):
+    """Pull full config from device using its driver's transport.
+    Returns (config, format) where format is 'json' or 'xml'.
+    """
+    device = get_device(device_name)
+    driver = load_driver(device["driver"])
+    if not driver:
+        raise ValueError(f"no driver for {device_name}")
+    transport = driver["transport"]
+
+    if transport == "gnmi":
+        return gnmi_pull(device), "json"
+    elif transport == "netconf":
+        return netconf_pull(device), "xml"
+    else:
+        raise ValueError(f"pull not supported for transport '{transport}'")
+
+
+def transport_push_full(device_name, config):
+    """Push full config to device (replace). Config is dict for gNMI, str for NETCONF."""
+    device = get_device(device_name)
+    driver = load_driver(device["driver"])
+    transport = driver["transport"]
+
+    if transport == "gnmi":
+        return gnmi_push(device, config)
+    elif transport == "netconf":
+        return netconf_push(device, config)
+    else:
+        raise ValueError(f"full push not supported for transport '{transport}'")
+
+
+# OpenConfig YANG list keys — used to build per-item gNMI delete paths
+_OC_LIST_KEYS = {
+    "static": "prefix",
+    "server": "address",
+    "neighbor": "neighbor-address",
+    "community-set": "community-set-name",
+    "community": "name",
+    "policy-definition": "name",
+    "statement": "name",
+}
+
+
+def _gnmi_delete_paths(config, base_path):
+    """Walk rendered JSON and build per-list-item gNMI delete paths.
+
+    Instead of deleting the whole container (which nukes everything),
+    build specific paths like:
+      /static-routes/static[prefix=10.200.1.0/24]
+      /bgp/neighbors/neighbor[neighbor-address=172.16.0.1]
+
+    Returns a list of paths to delete. If no list items found, returns
+    the base path (deletes the whole section).
+    """
+    paths = []
+
+    def _walk(obj, path):
+        if isinstance(obj, dict):
+            for key, val in obj.items():
+                if isinstance(val, list) and key in _OC_LIST_KEYS:
+                    # This is a keyed list — build per-item paths
+                    list_key = _OC_LIST_KEYS[key]
+                    for item in val:
+                        if isinstance(item, dict) and list_key in item:
+                            item_path = f"{path}/{key}[{list_key}={item[list_key]}]"
+                            paths.append(item_path)
+                elif isinstance(val, dict):
+                    _walk(val, f"{path}/{key}")
+                elif isinstance(val, list):
+                    # List without a known key — can't do per-item delete
+                    _walk_list_items(val, f"{path}/{key}")
+
+    def _walk_list_items(lst, path):
+        for item in lst:
+            if isinstance(item, dict):
+                _walk(item, path)
+
+    _walk(config, base_path)
+    return paths if paths else [base_path]
+
+
+def transport_push_partial(device_name, rendered_output, template_path, target_path=None, operation="merge"):
+    """Push rendered template to device via the right transport.
+
+    The operation comes from the service schema (template creator's decision):
+      merge:   gNMI Set update / NETCONF default merge
+      replace: gNMI Set replace / NETCONF nc:operation="replace" (set in template XML)
+      delete:  gNMI Set delete per list item / NETCONF nc:operation="delete" (template XML)
+
+    Returns dict with push metadata including whether confirmed_commit is pending.
+    """
+    device = get_device(device_name)
+    driver = load_driver(device["driver"])
+    transport = driver["transport"]
+
+    if transport == "gnmi":
+        if not target_path:
+            raise ValueError(f"no target path for gNMI — schema needs 'path' field")
+        if operation == "delete":
+            # Build per-item delete paths from rendered JSON
+            if rendered_output:
+                config = json.loads(rendered_output)
+                delete_paths = _gnmi_delete_paths(config, target_path)
+            else:
+                delete_paths = [target_path]
+            for path in delete_paths:
+                gnmi_delete_path(device, path)
+        elif operation == "replace":
+            config = json.loads(rendered_output)
+            gnmi_replace_path(device, target_path, config)
+        else:
+            config = json.loads(rendered_output)
+            gnmi_update_path(device, target_path, config)
+        return {"confirmed_commit": False}
+    elif transport == "netconf":
+        # For NETCONF delete: if no nc:operation="delete" in template, inject it
+        if operation == "delete" and 'nc:operation="delete"' not in rendered_output:
+            rendered_output = _inject_xml_delete(rendered_output)
+        return netconf_update(device, rendered_output)
+    else:
+        raise ValueError(f"partial push not supported for transport '{transport}'")
+
+
+def transport_confirm(device_name):
+    """Send confirming commit for devices with pending confirmed-commits."""
+    device = get_device(device_name)
+    driver = load_driver(device["driver"])
+    transport = driver["transport"]
+
+    if transport == "netconf":
+        netconf_confirm(device)
+    # gNMI doesn't need confirm — changes are immediate
 
 
 # ---------------------------------------------------------------------------
@@ -91,7 +535,7 @@ def config_path(device_name):
 def load_config(device_name):
     path = config_path(device_name)
     if not path.exists():
-        print(f"No config file for {device_name}. Run: shim pull {device_name}")
+        print(f"No config file for {device_name}. Run: nsci pull {device_name}")
         sys.exit(1)
     with open(path) as f:
         return json.load(f)
@@ -106,6 +550,262 @@ def save_config(device_name, config):
     return path
 
 
+def _git(cmd):
+    """Run a git command and return stdout."""
+    result = subprocess.run(
+        ["git"] + cmd,
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip(), result.returncode
+
+
+# ---------------------------------------------------------------------------
+# Stack helpers
+# ---------------------------------------------------------------------------
+
+def _load_stack(stack_name):
+    """Load and return a stack definition. Exits on error."""
+    stack_path = STACKS_DIR / stack_name / "stack.yaml"
+    if not stack_path.exists():
+        print(f"Stack '{stack_name}' not found.")
+        if STACKS_DIR.exists():
+            available = [d.name for d in STACKS_DIR.iterdir() if (d / "stack.yaml").exists()]
+            if available:
+                print(f"Available: {', '.join(available)}")
+        sys.exit(1)
+    with open(stack_path) as f:
+        return yaml.safe_load(f)
+
+
+def _resolve_stack_services(stack):
+    """Walk a stack and resolve each service × device into render jobs.
+
+    Returns list of dicts:
+      { service, device, driver, template_path, variables, errors }
+    """
+    inventory = load_inventory()
+    jobs = []
+
+    for svc_entry in stack.get("services", []):
+        service_name = svc_entry["service"]
+        # Stack can override operation to "delete" for teardown stacks
+        stack_operation = svc_entry.get("operation")
+        shared_vars = svc_entry.get("variables", {})
+        devices_spec = svc_entry.get("devices", [])
+        schema = load_schema(service_name)
+
+        # Normalize devices: list of names or dict of name->overrides
+        if isinstance(devices_spec, list):
+            device_map = {name: {} for name in devices_spec}
+        elif isinstance(devices_spec, dict):
+            device_map = devices_spec
+        else:
+            device_map = {}
+
+        for device_name, device_vars in device_map.items():
+            if device_vars is None:
+                device_vars = {}
+
+            job = {
+                "service": service_name,
+                "device": device_name,
+                "errors": [],
+            }
+
+            # Look up device in inventory
+            if device_name not in inventory:
+                job["errors"].append(f"device '{device_name}' not in inventory")
+                jobs.append(job)
+                continue
+
+            device_info = inventory[device_name]
+            driver_name = device_info.get("driver")
+            job["driver"] = driver_name
+
+            # Merge variables: shared + per-device (per-device wins)
+            merged = {**shared_vars, **device_vars}
+            job["variables"] = merged
+
+            # Carry the target path and operation from the schema
+            if schema:
+                raw_path = schema.get("path", "")
+                # Allow Jinja2 variables in schema path (e.g. network-instance[name={{ vrf }}])
+                if "{{" in raw_path:
+                    try:
+                        from jinja2 import Environment
+                        job["path"] = Environment().from_string(raw_path).render(**merged)
+                    except Exception as e:
+                        job["errors"].append(f"path render failed: {e}")
+                        job["path"] = raw_path
+                else:
+                    job["path"] = raw_path
+                # Stack operation: delete overrides schema. Otherwise schema decides.
+                job["operation"] = stack_operation if stack_operation else schema.get("operation", "merge")
+                # Skip variable validation for delete — not all vars are needed
+                if job["operation"] != "delete":
+                    errs = validate_variables(schema, merged, device_name)
+                    job["errors"].extend(errs)
+            else:
+                job["path"] = None
+                job["operation"] = stack_operation or "merge"
+
+            # Resolve template (delete-aware: tries delete.*.j2 first)
+            if job["operation"] == "delete":
+                template_path, err = resolve_template(service_name, driver_name, operation="delete")
+                job["template_path"] = template_path  # may be None — that's OK for gNMI delete
+                if err and get_transport(device_name) == "netconf":
+                    # NETCONF delete needs a template with nc:operation="delete"
+                    job["errors"].append(f"delete requires a template for NETCONF: {err}")
+            else:
+                template_path, err = resolve_template(service_name, driver_name)
+                if err:
+                    job["errors"].append(err)
+                job["template_path"] = template_path
+
+            jobs.append(job)
+
+    return jobs
+
+
+import re as _re
+
+# OpenConfig XML list item elements — nc:operation="delete" goes on these,
+# not the container, so we only delete the specific items from the stack.
+_OC_LIST_ELEMENTS = {
+    "static", "server", "neighbor", "community-set", "community",
+    "policy-definition", "statement", "filter",
+}
+
+
+def _inject_xml_delete(xml_str):
+    """Convert rendered XML to delete mode.
+
+    Two strategies based on template type:
+
+    OpenConfig templates (xmlns contains 'openconfig.net'):
+      Inject nc:operation="delete" on known list item elements (<static>,
+      <neighbor>, <server>, etc.) so only the stack's items are removed.
+
+    Vendor-native templates (Junos, etc.):
+      Swap all existing nc:operation="..." to nc:operation="delete".
+      Template creators must use explicit nc:operation on every operational
+      element — if nsci can't see it, nsci can't delete it.
+      Error if no nc:operation found (template needs explicit operations).
+
+    Both strategies ensure xmlns:nc is declared on the root element.
+    """
+    is_openconfig = "openconfig.net" in xml_str
+
+    # Ensure xmlns:nc is on the root element
+    def _add_ns(match):
+        tag = match.group(0)
+        if 'xmlns:nc=' not in tag:
+            tag = tag[:-1] + ' xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0">'
+        return tag
+    xml_str = _re.sub(r'<[a-zA-Z][\w:-]*(?:\s[^>]*)?>', _add_ns, xml_str, count=1)
+
+    if is_openconfig:
+        # OpenConfig: inject nc:operation="delete" on known list item elements
+        found_items = False
+        def _inject_on_items(match):
+            nonlocal found_items
+            tag_name = match.group(1)
+            full_tag = match.group(0)
+            if tag_name in _OC_LIST_ELEMENTS and 'nc:operation=' not in full_tag:
+                found_items = True
+                return full_tag[:-1] + ' nc:operation="delete">'
+            return full_tag
+        xml_str = _re.sub(r'<([a-zA-Z][\w-]*)(?:\s[^>]*)?>',  _inject_on_items, xml_str)
+
+        # Fallback: if no list items found, inject on root
+        if not found_items:
+            def _inject_root(match):
+                tag = match.group(0)
+                if 'nc:operation=' not in tag:
+                    tag = tag[:-1] + ' nc:operation="delete">'
+                return tag
+            xml_str = _re.sub(r'<[a-zA-Z][\w:-]*(?:\s[^>]*)?>', _inject_root, xml_str, count=1)
+    else:
+        # Vendor-native: swap all existing nc:operation values to "delete"
+        swapped = xml_str
+        swapped = swapped.replace('nc:operation="replace"', 'nc:operation="delete"')
+        swapped = swapped.replace('nc:operation="merge"', 'nc:operation="delete"')
+        swapped = swapped.replace("nc:operation='replace'", 'nc:operation="delete"')
+        swapped = swapped.replace("nc:operation='merge'", 'nc:operation="delete"')
+        if swapped == xml_str:
+            # No nc:operation found — template has no explicit operations
+            raise ValueError(
+                "non-OpenConfig template has no nc:operation attributes — "
+                "add explicit nc:operation (merge/replace) to every operational "
+                "element so nsci can swap them to delete at teardown time"
+            )
+        xml_str = swapped
+
+    return xml_str
+
+
+def _check_path_collisions(jobs):
+    """Detect two services targeting the same device + path. Returns errors."""
+    seen = {}
+    errors = []
+    for job in jobs:
+        if job["errors"]:
+            continue
+        path = job.get("path")
+        if not path:
+            continue
+        key = (job["device"], path)
+        if key in seen:
+            msg = (f"path collision: [{job['service']}] and [{seen[key]}] both target "
+                   f"{job['device']} at {path} — concurrent push would race")
+            job["errors"].append(msg)
+            errors.append(msg)
+        else:
+            seen[key] = job["service"]
+    return errors
+
+
+def _render_jobs(jobs):
+    """Render all jobs, adding 'rendered' and 'fmt' to each. Returns errors."""
+    errors = _check_path_collisions(jobs)
+    for job in jobs:
+        if job["errors"]:
+            errors.extend(job["errors"])
+            continue
+
+        # gNMI delete doesn't need a rendered payload — just the path
+        if job.get("operation") == "delete" and not job.get("template_path"):
+            job["rendered"] = ""
+            job["fmt"] = "delete"
+            continue
+
+        try:
+            job["rendered"] = render_template(job["template_path"], job["variables"])
+            name = job["template_path"].name
+            if name.endswith(".json.j2"):
+                job["fmt"] = "json"
+            elif name.endswith(".xml.j2"):
+                job["fmt"] = "xml"
+                # Vendor-native XML must have explicit nc:operation for delete support
+                rendered = job["rendered"]
+                if "openconfig.net" not in rendered and "nc:operation=" not in rendered:
+                    msg = (
+                        f"non-OpenConfig template '{name}' has no nc:operation attributes — "
+                        f"add explicit nc:operation (merge/replace) to every operational "
+                        f"element so stack-delete can swap them to delete"
+                    )
+                    job["errors"].append(msg)
+                    errors.append(msg)
+            else:
+                job["fmt"] = "rest"
+        except Exception as e:
+            job["errors"].append(f"render failed: {e}")
+            errors.append(str(e))
+    return errors
+
+
 # ---------------------------------------------------------------------------
 # Commands
 # ---------------------------------------------------------------------------
@@ -114,230 +814,1004 @@ def cmd_pull(args):
     """Pull device config into configs/<device>.json."""
     device_name = args.device
     device = get_device(device_name)
+    driver = load_driver(device["driver"])
+    transport = driver["transport"] if driver else "gnmi"
 
-    print(f"Pulling config from {device_name} ({device['hostname']})...")
-    config = gnmi_pull(device)
+    print(f"Pulling config from {device_name} ({device['hostname']}) via {transport}...")
 
-    path = save_config(device_name, config)
-    keys = sorted(k.split(":")[-1] for k in config.keys())
-    print(f"Saved: {path.relative_to(REPO_ROOT)}")
-    print(f"Sections: {', '.join(keys)}")
+    config, fmt = transport_pull(device_name)
 
-
-SNAPSHOTS_DIR = REPO_ROOT / "snapshots"
+    if fmt == "json":
+        path = save_config(device_name, config)
+        keys = sorted(k.split(":")[-1] for k in config.keys())
+        print(f"Saved: {path.relative_to(REPO_ROOT)}")
+        print(f"Sections: {', '.join(keys)}")
+    else:
+        # NETCONF returns XML — save as .xml
+        CONFIGS_DIR.mkdir(parents=True, exist_ok=True)
+        path = CONFIGS_DIR / f"{device_name}.xml"
+        with open(path, "w") as f:
+            f.write(config)
+        print(f"Saved: {path.relative_to(REPO_ROOT)}")
 
 
 def cmd_pull_snapshot(args):
-    """Pull device config into snapshots/<device>.json (pre-deploy backup)."""
+    """Pull device config into snapshots/<device> (pre-deploy backup)."""
     device_name = args.device
     device = get_device(device_name)
 
     print(f"Snapshotting {device_name} ({device['hostname']})...")
-    config = gnmi_pull(device)
+
+    config, fmt = transport_pull(device_name)
 
     SNAPSHOTS_DIR.mkdir(parents=True, exist_ok=True)
-    path = SNAPSHOTS_DIR / f"{device_name}.json"
-    with open(path, "w") as f:
-        json.dump(config, f, indent=2)
-        f.write("\n")
+    if fmt == "json":
+        path = SNAPSHOTS_DIR / f"{device_name}.json"
+        with open(path, "w") as f:
+            json.dump(config, f, indent=2)
+            f.write("\n")
+    else:
+        path = SNAPSHOTS_DIR / f"{device_name}.xml"
+        with open(path, "w") as f:
+            f.write(config)
     print(f"Saved: {path.relative_to(REPO_ROOT)}")
 
 
-def cmd_push(args):
-    """Push configs/<device>.json to a single device."""
-    device_name = args.device
+def _push_one_device(device_name):
+    """Push configs/<device>.json to a device. Returns (success, error)."""
     device = get_device(device_name)
-    config = load_config(device_name)
+    driver = load_driver(device["driver"])
+    transport = driver["transport"] if driver else "gnmi"
 
-    print(f"Pushing config to {device_name} ({device['hostname']})...")
+    print(f"Pushing config to {device_name} ({device['hostname']}) via {transport}...")
+
     try:
-        result = gnmi_push(device, config)
-        op = result["response"][0]["op"]
-        print(f"gNMI Set: {op}")
-        print(f"Device config replaced from {config_path(device_name).relative_to(REPO_ROOT)}")
+        if transport == "gnmi":
+            config = load_config(device_name)
+            result = gnmi_push(device, config)
+            op = result["response"][0]["op"]
+            print(f"  {device_name}: gNMI Set {op}")
+        elif transport == "netconf":
+            xml_path = CONFIGS_DIR / f"{device_name}.xml"
+            if xml_path.exists():
+                with open(xml_path) as f:
+                    xml_config = f.read()
+            else:
+                print(f"  {device_name}: FAILED — no .xml config file")
+                return False, f"no config file configs/{device_name}.xml"
+            netconf_push(device, xml_config)
+            print(f"  {device_name}: NETCONF edit-config OK")
+        else:
+            print(f"  {device_name}: FAILED — transport '{transport}' not supported")
+            return False, f"transport '{transport}' not supported"
+
+        return True, None
     except Exception as e:
-        print(f"PUSH FAILED for {device_name}: {e}")
-        return 1
+        print(f"  {device_name}: PUSH FAILED — {e}")
+        return False, str(e)
 
 
-def cmd_deploy(args):
-    """Deploy config to multiple devices: parallel push with atomic rollback.
+def _sync_one_device(device_name):
+    """Pull config back from device so configs/ reflects actual device state."""
+    try:
+        config_back, fmt = transport_pull(device_name)
+        if fmt == "json":
+            save_config(device_name, config_back)
+        print(f"  {device_name}: synced")
+    except Exception as e:
+        print(f"  {device_name}: sync failed — {e}")
 
-    Stages:
-      1. Pre-flight: pull current config from each device (save as rollback)
-      2. Push: send new config to all devices in parallel
-      3. Validate: check all devices match expected state
-      4. Rollback: if any device failed, restore all to pre-flight state
-    """
-    import concurrent.futures
 
+def cmd_push(args):
+    """Push configs/ to one or more devices."""
     device_names = args.devices
-    if not device_names:
-        print("No devices specified.")
+    multi = len(device_names) > 1
+
+    if not args.full_replace:
+        print(f"ERROR: full config replace requires --full-replace")
+        print(f"  This replaces the ENTIRE running config on the device.")
+        print(f"  If that's what you want: nsci push {' '.join(device_names)} --full-replace")
         return 1
 
-    workers = min(len(device_names), args.workers)
-    atomic = not args.no_atomic
+    if multi:
+        workers = min(len(device_names), args.workers)
+        atomic = not args.no_atomic
 
-    print(f"Deploy to {len(device_names)} devices (workers={workers}, atomic={atomic})")
-    print(f"  Devices: {', '.join(device_names)}")
-    print()
-
-    # --- Stage 1: Pre-flight — pull current configs as rollback snapshots ---
-    print("Stage 1: Pre-flight (saving rollback snapshots)...")
-    rollbacks = {}  # device_name -> current config from device
-    preflight_failures = []
-
-    def preflight_one(name):
-        device = get_device(name)
-        try:
-            config = gnmi_pull(device)
-            return name, config, None
-        except Exception as e:
-            return name, None, str(e)
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = {pool.submit(preflight_one, n): n for n in device_names}
-        for future in concurrent.futures.as_completed(futures):
-            name, config, error = future.result()
-            if error:
-                print(f"  {name}: FAILED pre-flight — {error}")
-                preflight_failures.append(name)
-            else:
-                rollbacks[name] = config
-                print(f"  {name}: OK (snapshot saved)")
-
-    if preflight_failures:
-        print(f"\nABORTED: {len(preflight_failures)} devices failed pre-flight. No changes made.")
-        return 1
-
-    print()
-
-    # --- Stage 2: Push — send new configs in parallel ---
-    print("Stage 2: Pushing configs...")
-    push_results = {}  # device_name -> (success, error)
-
-    def push_one(name):
-        device = get_device(name)
-        path = config_path(name)
-        if not path.exists():
-            return name, False, f"no config file (run: shim pull {name})"
-        with open(path) as f:
-            config = json.load(f)
-        try:
-            gnmi_push(device, config)
-            return name, True, None
-        except Exception as e:
-            return name, False, str(e)
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = {pool.submit(push_one, n): n for n in device_names}
-        for future in concurrent.futures.as_completed(futures):
-            name, success, error = future.result()
-            push_results[name] = (success, error)
-            if success:
-                print(f"  {name}: PUSHED")
-            else:
-                print(f"  {name}: FAILED — {error}")
-
-    failed = [n for n, (s, _) in push_results.items() if not s]
-    succeeded = [n for n, (s, _) in push_results.items() if s]
-    print()
-
-    # --- Stage 3: Validate ---
-    if succeeded:
-        print("Stage 3: Validating...")
-        validate_failures = []
-
-        def validate_one(name):
-            device = get_device(name)
-            local_config = load_config(name)
-            try:
-                live_config = gnmi_pull(device)
-                local_str = json.dumps(local_config, sort_keys=True)
-                live_str = json.dumps(live_config, sort_keys=True)
-                return name, local_str == live_str, None
-            except Exception as e:
-                return name, False, str(e)
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
-            futures = {pool.submit(validate_one, n): n for n in succeeded}
-            for future in concurrent.futures.as_completed(futures):
-                name, valid, error = future.result()
-                if valid:
-                    print(f"  {name}: IN SYNC")
-                else:
-                    reason = error or "config mismatch"
-                    print(f"  {name}: VALIDATION FAILED — {reason}")
-                    validate_failures.append(name)
-
-        failed.extend(validate_failures)
+        print(f"Full config replace to {len(device_names)} devices (workers={workers}, atomic={atomic})")
+        print(f"  Devices: {', '.join(device_names)}")
         print()
 
-    # --- Stage 4: Rollback if atomic and any failures ---
-    if failed and atomic:
-        print(f"Stage 4: ROLLING BACK ({len(failed)} failures, atomic mode)")
-        print(f"  Restoring all {len(device_names)} devices to pre-flight state...")
+        # --- Pre-flight: save rollback snapshots ---
+        print("Pre-flight (saving rollback snapshots)...")
+        rollbacks = {}
+        preflight_failures = []
 
-        def rollback_one(name):
-            device = get_device(name)
+        def preflight_one(name):
             try:
-                gnmi_push(device, rollbacks[name])
+                config, fmt = transport_pull(name)
+                return name, config, fmt, None
+            except Exception as e:
+                return name, None, None, str(e)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {pool.submit(preflight_one, n): n for n in device_names}
+            for future in concurrent.futures.as_completed(futures):
+                name, config, fmt, error = future.result()
+                if error:
+                    print(f"  {name}: FAILED pre-flight — {error}")
+                    preflight_failures.append(name)
+                else:
+                    rollbacks[name] = (config, fmt)
+                    print(f"  {name}: OK (snapshot saved)")
+
+        if preflight_failures:
+            print(f"\nABORTED: {len(preflight_failures)} devices failed pre-flight. No changes made.")
+            return 1
+
+        print()
+
+        # --- Push ---
+        print("Pushing configs...")
+        push_results = {}
+
+        def push_one(name):
+            try:
+                device = get_device(name)
+                driver = load_driver(device["driver"])
+                transport = driver["transport"]
+                if transport == "gnmi":
+                    config = load_config(name)
+                    gnmi_push(device, config)
+                elif transport == "netconf":
+                    xml_path = CONFIGS_DIR / f"{name}.xml"
+                    if not xml_path.exists():
+                        return name, False, f"no config file configs/{name}.xml"
+                    with open(xml_path) as f:
+                        netconf_push(device, f.read())
+                else:
+                    return name, False, f"transport '{transport}' not supported"
                 return name, True, None
             except Exception as e:
                 return name, False, str(e)
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
-            futures = {pool.submit(rollback_one, n): n for n in device_names}
+            futures = {pool.submit(push_one, n): n for n in device_names}
             for future in concurrent.futures.as_completed(futures):
                 name, success, error = future.result()
+                push_results[name] = (success, error)
                 if success:
-                    print(f"  {name}: ROLLED BACK")
+                    print(f"  {name}: PUSHED")
                 else:
-                    print(f"  {name}: ROLLBACK FAILED — {error} (MANUAL INTERVENTION NEEDED)")
+                    print(f"  {name}: FAILED — {error}")
+
+        failed = [n for n, (s, _) in push_results.items() if not s]
+        succeeded = [n for n, (s, _) in push_results.items() if s]
+        print()
+
+        # --- Validate ---
+        if succeeded:
+            print("Validating...")
+            validate_failures = []
+
+            def validate_one(name):
+                try:
+                    live_config, _ = transport_pull(name)
+                    local_config = load_config(name)
+                    local_str = json.dumps(local_config, sort_keys=True)
+                    live_str = json.dumps(live_config, sort_keys=True)
+                    return name, local_str == live_str, None
+                except Exception as e:
+                    return name, False, str(e)
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+                futures = {pool.submit(validate_one, n): n for n in succeeded}
+                for future in concurrent.futures.as_completed(futures):
+                    name, valid, error = future.result()
+                    if valid:
+                        print(f"  {name}: IN SYNC")
+                    else:
+                        reason = error or "config mismatch"
+                        print(f"  {name}: VALIDATION FAILED — {reason}")
+                        validate_failures.append(name)
+
+            failed.extend(validate_failures)
+            print()
+
+        # --- Rollback if atomic and failures ---
+        if failed and atomic:
+            print(f"ROLLING BACK ({len(failed)} failures, atomic mode)")
+            print(f"  Restoring all {len(device_names)} devices to pre-flight state...")
+
+            def rollback_one(name):
+                config, fmt = rollbacks[name]
+                try:
+                    transport_push_full(name, config)
+                    return name, True, None
+                except Exception as e:
+                    return name, False, str(e)
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+                futures = {pool.submit(rollback_one, n): n for n in device_names}
+                for future in concurrent.futures.as_completed(futures):
+                    name, success, error = future.result()
+                    if success:
+                        print(f"  {name}: ROLLED BACK")
+                    else:
+                        print(f"  {name}: ROLLBACK FAILED — {error} (MANUAL INTERVENTION NEEDED)")
+
+            print(f"\nPUSH FAILED — all devices rolled back to previous state.")
+            return 1
+
+        elif failed and not atomic:
+            print(f"WARNING: {len(failed)} devices failed (non-atomic mode, no rollback)")
+            print(f"  Failed: {', '.join(failed)}")
+            print(f"  Succeeded: {', '.join(succeeded)}")
+            if succeeded:
+                print()
+                print("Syncing configs/ for succeeded devices...")
+                for name in succeeded:
+                    _sync_one_device(name)
+            return 1
+
+        else:
+            print("Syncing configs/...")
+            for name in succeeded:
+                _sync_one_device(name)
+            print()
+            print(f"PUSH SUCCEEDED — {len(succeeded)} devices updated.")
+            return 0
+
+    else:
+        # Single device push
+        device_name = device_names[0]
+        success, error = _push_one_device(device_name)
+        if not success:
+            return 1
+
+        # Sync
+        _sync_one_device(device_name)
+        return 0
+
+
+
+
+# ---------------------------------------------------------------------------
+# Stack commands
+# ---------------------------------------------------------------------------
+
+def cmd_stack_render(args):
+    """Render all templates in a stack — dry run, no push."""
+    stack = _load_stack(args.stack)
+    delete_mode = getattr(args, "delete", False)
+
+    # Force delete on all services when --delete flag is set
+    if delete_mode:
+        for svc_entry in stack.get("services", []):
+            svc_entry["operation"] = "delete"
+
+    mode_label = " (DELETE)" if delete_mode else ""
+    print(f"Stack: {stack.get('name', args.stack)}{mode_label}")
+    print(f"Description: {stack.get('description', '')}")
+    print(f"Atomic: {stack.get('atomic', True)}")
+    print()
+
+    jobs = _resolve_stack_services(stack)
+    _render_jobs(jobs)
+
+    had_errors = False
+    for job in jobs:
+        svc = job["service"]
+        dev = job["device"]
+        header = f"[{svc}] → {dev}"
+
+        if job["errors"]:
+            had_errors = True
+            print(f"{header}")
+            for e in job["errors"]:
+                print(f"  ERROR: {e}")
+            print()
+            continue
+
+        driver = job["driver"]
+        target = job.get("path", "?")
+        op = job.get("operation", "merge")
+        transport = get_transport(dev)
+
+        if op == "delete" and not job.get("template_path"):
+            # gNMI path-only delete (no template found)
+            print(f"{header} (driver={driver})")
+            print(f"  target: {target} (DELETE)")
+            print()
+        elif op == "delete" and transport == "gnmi" and job.get("rendered"):
+            # gNMI delete with rendered JSON — show per-item paths
+            template_path = job["template_path"]
+            template_file = template_path.relative_to(LIBRARY_DIR)
+            print(f"{header} (driver={driver}, template={template_file})")
+            try:
+                config = json.loads(job["rendered"])
+                del_paths = _gnmi_delete_paths(config, target)
+                for dp in del_paths:
+                    print(f"  gNMI SET DELETE {dp}")
+            except json.JSONDecodeError:
+                print(f"  gNMI SET DELETE {target}")
+            except ValueError as e:
+                had_errors = True
+                print(f"  ERROR: {e}")
+            print()
+        elif op == "delete" and transport == "netconf":
+            # NETCONF delete — show XML with nc:operation="delete" injected
+            template_path = job["template_path"]
+            template_file = template_path.relative_to(LIBRARY_DIR)
+            print(f"{header} (driver={driver}, template={template_file})")
+            print(f"  target: {target} (DELETE)")
+            rendered = job["rendered"]
+            if 'nc:operation="delete"' not in rendered:
+                try:
+                    rendered = _inject_xml_delete(rendered)
+                except ValueError as e:
+                    had_errors = True
+                    print(f"  ERROR: {e}")
+                    print()
+                    continue
+            for line in rendered.strip().split("\n"):
+                print(f"  {line}")
+            print()
+        else:
+            template_path = job["template_path"]
+            template_file = template_path.relative_to(LIBRARY_DIR)
+            print(f"{header} (driver={driver}, template={template_file})")
+            print(f"  target: {target} ({op})")
+            for line in job["rendered"].strip().split("\n"):
+                print(f"  {line}")
+            print()
+
+    # Summary
+    devices = sorted(set(j["device"] for j in jobs))
+    services = sorted(set(j["service"] for j in jobs))
+    errors = sum(1 for j in jobs if j["errors"])
+    print("-" * 60)
+    print(f"Services: {', '.join(services)}")
+    print(f"Devices:  {', '.join(devices)}")
+    print(f"Jobs:     {len(jobs)} total, {len(jobs) - errors} OK, {errors} errors")
+
+    return 1 if had_errors else 0
+
+
+def cmd_stack_deploy(args):
+    """Deploy a stack: render → push (commit-confirm) → validate → confirm → sync.
+
+    Full pipeline:
+      1. Render:      resolve all services × devices, render Jinja2 templates
+      2. Pre-flight:  snapshot current config from each device (rollback point)
+      3. Push:        send rendered templates to devices
+                      - NETCONF w/ commit-confirm: edit candidate → confirmed commit (timer starts)
+                      - NETCONF w/o commit-confirm: edit-config merge on running
+                      - gNMI: Set update (immediate, no commit-confirm)
+      4. Validate:    verify rendered sections are present on devices
+      5. Confirm:     send confirming commit to NETCONF devices (stops rollback timer)
+                      If validation fails and atomic: DON'T confirm → timer expires → auto-rollback
+      6. Sync:        pull full config back from each device, save to configs/
+    """
+    stack = _load_stack(args.stack)
+    stack_name = stack.get("name", args.stack)
+    atomic = stack.get("atomic", True)
+    workers = stack.get("workers", 10)
+
+    print(f"Stack: {stack_name}")
+    print(f"Description: {stack.get('description', '')}")
+    print(f"Atomic: {atomic}")
+    print()
+
+    # --- Stage 1: Render ---
+    print("Stage 1: Rendering templates...")
+    jobs = _resolve_stack_services(stack)
+    _render_jobs(jobs)
+
+    error_jobs = [j for j in jobs if j["errors"]]
+    if error_jobs:
+        for j in error_jobs:
+            for e in j["errors"]:
+                print(f"  [{j['service']}] {j['device']}: {e}")
+        print(f"\nABORTED: {len(error_jobs)} jobs failed to render. No changes made.")
+        return 1
+
+    all_devices = list(dict.fromkeys(j["device"] for j in jobs))
+    all_services = sorted(set(j["service"] for j in jobs))
+    workers = min(len(all_devices), workers)
+
+    # Show which devices support commit-confirm
+    confirm_devices = set()
+    for name in all_devices:
+        device = get_device(name)
+        driver = load_driver(device["driver"])
+        if driver:
+            caps = driver.get("capabilities", {})
+            has_cc = caps.get("commit_confirm", False) and caps.get("candidate_datastore", False)
+            cc_label = " (commit-confirm)" if has_cc else ""
+            if has_cc:
+                confirm_devices.add(name)
+        else:
+            cc_label = ""
+        device_jobs = [j for j in jobs if j["device"] == name]
+        for job in device_jobs:
+            tmpl = job["template_path"].relative_to(LIBRARY_DIR)
+            print(f"  [{job['service']}] → {name} ({job['driver']}{cc_label}, {tmpl})")
+
+    print(f"\n  {len(jobs)} jobs rendered OK")
+    if confirm_devices:
+        print(f"  Commit-confirm devices: {', '.join(sorted(confirm_devices))}")
+    print()
+
+    # --- Stage 2: Pre-flight ---
+    print("Stage 2: Pre-flight (saving rollback snapshots)...")
+    rollbacks = {}
+    preflight_failures = []
+
+    def preflight_one(name):
+        try:
+            config, fmt = transport_pull(name)
+            return name, config, fmt, None
+        except Exception as e:
+            return name, None, None, str(e)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {pool.submit(preflight_one, n): n for n in all_devices}
+        for future in concurrent.futures.as_completed(futures):
+            name, config, fmt, error = future.result()
+            if error:
+                print(f"  {name}: FAILED — {error}")
+                preflight_failures.append(name)
+            else:
+                rollbacks[name] = (config, fmt)
+                print(f"  {name}: OK")
+
+    if preflight_failures:
+        print(f"\nABORTED: {len(preflight_failures)} devices unreachable. No changes made.")
+        return 1
+
+    print()
+
+    # --- Stage 3: Push rendered templates ---
+    print("Stage 3: Pushing rendered templates...")
+    push_results = {}  # (service, device) -> (success, error, metadata)
+
+    def push_one_job(job):
+        svc = job["service"]
+        dev = job["device"]
+        try:
+            result = transport_push_partial(
+                dev, job["rendered"], job["template_path"],
+                target_path=job.get("path"),
+                operation=job.get("operation", "merge"),
+            )
+            return svc, dev, True, None, result
+        except Exception as e:
+            return svc, dev, False, str(e), {}
+
+    def push_device_jobs(device_jobs):
+        """Push all jobs for one device sequentially (avoids write-lock races)."""
+        results = []
+        for job in device_jobs:
+            results.append(push_one_job(job))
+        return results
+
+    # Group jobs by device — serialize within device, parallelize across devices
+    from collections import defaultdict
+    jobs_by_device = defaultdict(list)
+    for j in jobs:
+        jobs_by_device[j["device"]].append(j)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {pool.submit(push_device_jobs, dj): dev for dev, dj in jobs_by_device.items()}
+        for future in concurrent.futures.as_completed(futures):
+            for svc, dev, success, error, meta in future.result():
+                push_results[(svc, dev)] = (success, error, meta)
+                if success:
+                    cc = " (confirmed-commit pending)" if meta.get("confirmed_commit") else ""
+                    print(f"  [{svc}] → {dev}: PUSHED{cc}")
+                else:
+                    print(f"  [{svc}] → {dev}: FAILED — {error}")
+
+    push_failed = [(s, d) for (s, d), (ok, _, _) in push_results.items() if not ok]
+
+    # Track which devices have pending confirmed-commits
+    pending_confirm = set()
+    for (svc, dev), (ok, _, meta) in push_results.items():
+        if ok and meta.get("confirmed_commit"):
+            pending_confirm.add(dev)
+
+    print()
+
+    # --- Stage 4: Validate ---
+    failed_devices = set()
+    if push_failed:
+        failed_devices.update(d for _, d in push_failed)
+    else:
+        print("Stage 4: Validating...")
+
+        def _strip_oc_prefix(key):
+            """Strip OpenConfig module prefix from key (e.g. 'openconfig-system:servers' → 'servers')."""
+            return key.split(":", 1)[1] if ":" in key else key
+
+        def _find_key(key, d):
+            """Find a key in dict, ignoring OpenConfig module prefixes."""
+            if key in d:
+                return key
+            bare = _strip_oc_prefix(key)
+            for k in d:
+                if _strip_oc_prefix(k) == bare:
+                    return k
+            return None
+
+        def _deep_check(expected, actual, path=""):
+            """Recursively check that all keys/values in expected exist in actual.
+
+            Returns list of mismatch descriptions.
+            """
+            mismatches = []
+            if isinstance(expected, dict):
+                if not isinstance(actual, dict):
+                    return [f"{path}: expected dict, got {type(actual).__name__}"]
+                for key in expected:
+                    actual_key = _find_key(key, actual)
+                    if actual_key is None:
+                        mismatches.append(f"{path}.{key}: MISSING")
+                    else:
+                        mismatches.extend(_deep_check(expected[key], actual[actual_key], f"{path}.{key}"))
+            elif isinstance(expected, list):
+                if not isinstance(actual, list):
+                    return [f"{path}: expected list, got {type(actual).__name__}"]
+                # Match list items by key fields (name, address, prefix, etc.)
+                key_fields = ["name", "address", "prefix", "neighbor-address",
+                              "community-set-name", "index"]
+                list_key = None
+                for kf in key_fields:
+                    if expected and isinstance(expected[0], dict) and kf in expected[0]:
+                        list_key = kf
+                        break
+                if list_key:
+                    actual_by_key = {}
+                    for item in actual:
+                        if isinstance(item, dict) and list_key in item:
+                            actual_by_key[str(item[list_key])] = item
+                    for item in expected:
+                        if isinstance(item, dict) and list_key in item:
+                            k = str(item[list_key])
+                            if k not in actual_by_key:
+                                mismatches.append(f"{path}[{list_key}={k}]: MISSING")
+                            else:
+                                mismatches.extend(_deep_check(item, actual_by_key[k],
+                                                              f"{path}[{list_key}={k}]"))
+                else:
+                    # No key field — check by index
+                    for i, item in enumerate(expected):
+                        if i >= len(actual):
+                            mismatches.append(f"{path}[{i}]: MISSING")
+                        else:
+                            mismatches.extend(_deep_check(item, actual[i], f"{path}[{i}]"))
+            else:
+                if not _values_match(expected, actual):
+                    mismatches.append(f"{path}: expected {expected!r}, got {actual!r}")
+            return mismatches
+
+        def _values_match(expected, actual):
+            """Compare values, handling BGP community format differences.
+
+            Arista returns communities as integers (65000*65536+100 = 4259840100)
+            while templates use 'AS:value' string format ('65000:100').
+            """
+            if str(expected) == str(actual):
+                return True
+            # BGP community: "AS:value" string vs numeric encoding
+            exp_str = str(expected)
+            if ":" in exp_str:
+                parts = exp_str.split(":", 1)
+                try:
+                    numeric = int(parts[0]) * 65536 + int(parts[1])
+                    if str(numeric) == str(actual):
+                        return True
+                except (ValueError, IndexError):
+                    pass
+            return False
+
+        def validate_one(name):
+            """Validate all jobs for a device. Returns (name, ok, details)."""
+            device = get_device(name)
+            driver = load_driver(device["driver"])
+            transport = driver["transport"]
+            device_jobs = [j for j in jobs if j["device"] == name]
+            issues = []
+
+            for job in device_jobs:
+                svc = job["service"]
+                target = job.get("path")
+
+                if job["fmt"] == "json" and transport == "gnmi" and target:
+                    # Pull the specific section via gNMI Get and deep compare
+                    try:
+                        live_section = gnmi_get_section(device, target)
+                        rendered_dict = json.loads(job["rendered"])
+                        mismatches = _deep_check(rendered_dict, live_section)
+                        for m in mismatches:
+                            issues.append(f"[{svc}] {m}")
+                    except Exception as e:
+                        issues.append(f"[{svc}] validation read failed: {e}")
+                elif job["fmt"] == "json":
+                    # Fallback: pull full config, check rendered keys exist
+                    try:
+                        live_config, _ = transport_pull(name)
+                        rendered_dict = json.loads(job["rendered"])
+                        for key in rendered_dict:
+                            if key not in live_config:
+                                issues.append(f"[{svc}] missing section: {key}")
+                    except Exception as e:
+                        issues.append(f"[{svc}] validation read failed: {e}")
+                else:
+                    # NETCONF/XML — pull full config, basic sanity check
+                    try:
+                        transport_pull(name)
+                        # Device responded — config is at least not broken
+                    except Exception as e:
+                        issues.append(f"[{svc}] device unreachable after push: {e}")
+
+            return name, len(issues) == 0, issues
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {pool.submit(validate_one, n): n for n in all_devices}
+            for future in concurrent.futures.as_completed(futures):
+                name, ok, issues = future.result()
+                if ok:
+                    print(f"  {name}: OK")
+                else:
+                    for issue in issues:
+                        print(f"  {name}: FAIL — {issue}")
+                    failed_devices.add(name)
+
+        print()
+
+    # --- Stage 5: Confirm or Rollback ---
+    if failed_devices and atomic:
+        if pending_confirm:
+            print(f"Stage 5: VALIDATION FAILED — letting commit-confirm timers expire...")
+            print(f"  Devices with pending confirmed-commits will auto-rollback:")
+            for name in sorted(pending_confirm):
+                device = get_device(name)
+                driver = load_driver(device["driver"])
+                timeout = driver.get("capabilities", {}).get("commit_confirm_timeout", 120)
+                print(f"  {name}: will auto-rollback in {timeout}s (NOT confirming)")
+
+        # For devices without commit-confirm (gNMI), do manual rollback
+        manual_rollback = [n for n in all_devices if n not in pending_confirm]
+        if manual_rollback:
+            print(f"\n  Manually rolling back {len(manual_rollback)} devices without commit-confirm...")
+
+            def rollback_one(name):
+                config, fmt = rollbacks[name]
+                try:
+                    transport_push_full(name, config)
+                    return name, True, None
+                except Exception as e:
+                    return name, False, str(e)
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+                futures = {pool.submit(rollback_one, n): n for n in manual_rollback}
+                for future in concurrent.futures.as_completed(futures):
+                    name, success, error = future.result()
+                    if success:
+                        print(f"  {name}: ROLLED BACK")
+                    else:
+                        print(f"  {name}: ROLLBACK FAILED — {error} (MANUAL INTERVENTION NEEDED)")
+
+        # Sync configs back to pre-deploy state
+        print()
+        print("  Syncing configs/ to rolled-back state...")
+        for name in all_devices:
+            config, fmt = rollbacks[name]
+            if fmt == "json":
+                save_config(name, config)
+            else:
+                CONFIGS_DIR.mkdir(parents=True, exist_ok=True)
+                path = CONFIGS_DIR / f"{name}.xml"
+                with open(path, "w") as f:
+                    f.write(config)
 
         print(f"\nDEPLOY FAILED — all devices rolled back to previous state.")
         return 1
 
-    elif failed and not atomic:
-        print(f"WARNING: {len(failed)} devices failed (non-atomic mode, no rollback)")
-        print(f"  Failed: {', '.join(failed)}")
-        print(f"  Succeeded: {', '.join(succeeded)}")
+    elif failed_devices and not atomic:
+        succeeded_devices = [d for d in all_devices if d not in failed_devices]
+        # Confirm successful devices that have pending commits
+        for name in succeeded_devices:
+            if name in pending_confirm:
+                try:
+                    transport_confirm(name)
+                    print(f"  {name}: confirmed")
+                except Exception as e:
+                    print(f"  {name}: CONFIRM FAILED — {e}")
+        print(f"WARNING: {len(failed_devices)} devices had failures (non-atomic mode)")
+        print(f"  Failed:    {', '.join(sorted(failed_devices))}")
+        print(f"  Succeeded: {', '.join(succeeded_devices)}")
         return 1
 
     else:
-        print(f"DEPLOY SUCCEEDED — {len(succeeded)} devices updated.")
+        # All good — confirm all pending confirmed-commits
+        if pending_confirm:
+            print("Stage 5: Confirming commits...")
+            for name in sorted(pending_confirm):
+                try:
+                    transport_confirm(name)
+                    print(f"  {name}: CONFIRMED")
+                except Exception as e:
+                    print(f"  {name}: CONFIRM FAILED — {e} (device may auto-rollback!)")
+                    failed_devices.add(name)
+
+            if failed_devices:
+                print(f"\nDEPLOY FAILED — some devices could not be confirmed.")
+                return 1
+
+            print()
+
+        # --- Stage 6: Sync configs/ ---
+        print("Stage 6: Syncing configs/...")
+
+        def sync_one(name):
+            try:
+                config, fmt = transport_pull(name)
+                if fmt == "json":
+                    save_config(name, config)
+                else:
+                    CONFIGS_DIR.mkdir(parents=True, exist_ok=True)
+                    path = CONFIGS_DIR / f"{name}.xml"
+                    with open(path, "w") as f:
+                        f.write(config)
+                return name, True, None
+            except Exception as e:
+                return name, False, str(e)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {pool.submit(sync_one, n): n for n in all_devices}
+            for future in concurrent.futures.as_completed(futures):
+                name, success, error = future.result()
+                if success:
+                    print(f"  {name}: synced")
+                else:
+                    print(f"  {name}: sync failed ��� {error}")
+
+        print()
+        print(f"STACK DEPLOY SUCCEEDED — {stack_name}")
+        print(f"  {len(jobs)} service configs pushed to {len(all_devices)} devices")
+        if pending_confirm:
+            print(f"  {len(pending_confirm)} devices confirmed via commit-confirm")
+        print(f"  configs/ synced with live state")
         return 0
 
 
-def cmd_stack_deploy(args):
-    """Deploy using a stack definition from stacks/."""
-    stack_name = args.stack
-    stack_path = STACKS_DIR / stack_name / "stack.yaml"
+def cmd_stack_delete(args):
+    """Delete all config deployed by a stack.
 
-    if not stack_path.exists():
-        print(f"Stack '{stack_name}' not found.")
-        if STACKS_DIR.exists():
-            available = [d.name for d in STACKS_DIR.iterdir() if (d / "stack.yaml").exists()]
-            if available:
-                print(f"Available: {', '.join(available)}")
-        return 1
+    Uses the same stack.yaml as deploy, but removes config instead of pushing it.
 
-    service = yaml.safe_load(open(stack_path))
-    print(f"Service: {service.get('name', service_name)}")
-    print(f"Description: {service.get('description', '')}")
+    For gNMI:    Set delete at the schema path (no payload needed)
+    For NETCONF: Render template for XML structure, inject nc:operation="delete",
+                 push via edit-config. Delete-specific templates (delete.*.j2) are
+                 used when available for finer control.
+
+    Pipeline: Resolve → Render → Pre-flight → Delete → Confirm → Sync
+    """
+    stack = _load_stack(args.stack)
+    stack_name = stack.get("name", args.stack)
+    atomic = stack.get("atomic", True)
+    workers = stack.get("workers", 10)
+
+    # Force operation: delete on all services
+    for svc_entry in stack.get("services", []):
+        svc_entry["operation"] = "delete"
+
+    print(f"Stack: {stack_name} (DELETE)")
+    print(f"Description: {stack.get('description', '')}")
+    print(f"Atomic: {atomic}")
     print()
 
-    # Build args for cmd_deploy
-    class DeployArgs:
-        pass
+    # --- Stage 1: Resolve & Render ---
+    print("Stage 1: Resolving delete targets...")
+    jobs = _resolve_stack_services(stack)
+    _render_jobs(jobs)
 
-    deploy_args = DeployArgs()
-    deploy_args.devices = service["devices"]
-    deploy_args.workers = service.get("workers", 10)
-    deploy_args.no_atomic = not service.get("atomic", True)
+    error_jobs = [j for j in jobs if j["errors"]]
+    if error_jobs:
+        for j in error_jobs:
+            for e in j["errors"]:
+                print(f"  [{j['service']}] {j['device']}: {e}")
+        print(f"\nABORTED: {len(error_jobs)} jobs failed. No changes made.")
+        return 1
 
-    return cmd_deploy(deploy_args)
+    all_devices = list(dict.fromkeys(j["device"] for j in jobs))
+    workers = min(len(all_devices), workers)
+
+    # Show what will be deleted
+    confirm_devices = set()
+    for name in all_devices:
+        device = get_device(name)
+        driver = load_driver(device["driver"])
+        if driver:
+            caps = driver.get("capabilities", {})
+            has_cc = caps.get("commit_confirm", False) and caps.get("candidate_datastore", False)
+            cc_label = " (commit-confirm)" if has_cc else ""
+            if has_cc:
+                confirm_devices.add(name)
+        else:
+            cc_label = ""
+        device_jobs = [j for j in jobs if j["device"] == name]
+        for job in device_jobs:
+            target = job.get("path", "?")
+            transport = get_transport(name)
+            if transport == "gnmi" and job.get("rendered"):
+                try:
+                    config = json.loads(job["rendered"])
+                    del_paths = _gnmi_delete_paths(config, target)
+                    for dp in del_paths:
+                        print(f"  [{job['service']}] → {name}: DELETE {dp}")
+                except (json.JSONDecodeError, ValueError):
+                    print(f"  [{job['service']}] → {name}: DELETE {target}")
+            elif transport == "gnmi":
+                print(f"  [{job['service']}] → {name}: DELETE {target}")
+            else:
+                tmpl_name = job["template_path"].name if job.get("template_path") else "path-only"
+                print(f"  [{job['service']}] → {name}: DELETE via {tmpl_name}{cc_label}")
+
+    print(f"\n  {len(jobs)} deletions planned")
+    if confirm_devices:
+        print(f"  Commit-confirm devices: {', '.join(sorted(confirm_devices))}")
+    print()
+
+    # --- Stage 2: Pre-flight ---
+    print("Stage 2: Pre-flight (saving rollback snapshots)...")
+    rollbacks = {}
+    preflight_failures = []
+
+    def preflight_one(name):
+        try:
+            config, fmt = transport_pull(name)
+            return name, config, fmt, None
+        except Exception as e:
+            return name, None, None, str(e)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {pool.submit(preflight_one, n): n for n in all_devices}
+        for future in concurrent.futures.as_completed(futures):
+            name, config, fmt, error = future.result()
+            if error:
+                print(f"  {name}: FAILED — {error}")
+                preflight_failures.append(name)
+            else:
+                rollbacks[name] = (config, fmt)
+                print(f"  {name}: OK")
+
+    if preflight_failures:
+        print(f"\nABORTED: {len(preflight_failures)} devices unreachable. No changes made.")
+        return 1
+
+    print()
+
+    # --- Stage 3: Delete ---
+    print("Stage 3: Deleting config...")
+    push_results = {}
+
+    def delete_one_job(job):
+        svc = job["service"]
+        dev = job["device"]
+        try:
+            result = transport_push_partial(
+                dev, job.get("rendered", ""), job.get("template_path"),
+                target_path=job.get("path"), operation="delete",
+            )
+            return svc, dev, True, None, result
+        except Exception as e:
+            return svc, dev, False, str(e), {}
+
+    def delete_device_jobs(device_jobs):
+        """Delete all jobs for one device sequentially (avoids write-lock races)."""
+        results = []
+        for job in device_jobs:
+            results.append(delete_one_job(job))
+        return results
+
+    # Group jobs by device — serialize within device, parallelize across devices
+    from collections import defaultdict
+    jobs_by_device = defaultdict(list)
+    for j in jobs:
+        jobs_by_device[j["device"]].append(j)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {pool.submit(delete_device_jobs, dj): dev for dev, dj in jobs_by_device.items()}
+        for future in concurrent.futures.as_completed(futures):
+            for svc, dev, success, error, meta in future.result():
+                push_results[(svc, dev)] = (success, error, meta)
+                if success:
+                    cc = " (confirmed-commit pending)" if meta.get("confirmed_commit") else ""
+                    print(f"  [{svc}] → {dev}: DELETED{cc}")
+                else:
+                    print(f"  [{svc}] → {dev}: FAILED — {error}")
+
+    push_failed = [(s, d) for (s, d), (ok, _, _) in push_results.items() if not ok]
+
+    pending_confirm = set()
+    for (svc, dev), (ok, _, meta) in push_results.items():
+        if ok and meta.get("confirmed_commit"):
+            pending_confirm.add(dev)
+
+    print()
+
+    # --- Stage 4: Confirm or Rollback ---
+    failed_devices = set(d for _, d in push_failed)
+
+    if failed_devices and atomic:
+        if pending_confirm:
+            print(f"Stage 4: DELETE FAILED — letting commit-confirm timers expire...")
+            for name in sorted(pending_confirm):
+                device = get_device(name)
+                driver = load_driver(device["driver"])
+                timeout = driver.get("capabilities", {}).get("commit_confirm_timeout", 120)
+                print(f"  {name}: will auto-rollback in {timeout}s (NOT confirming)")
+
+        manual_rollback = [n for n in all_devices if n not in pending_confirm]
+        if manual_rollback:
+            print(f"\n  Rolling back {len(manual_rollback)} devices...")
+            def rollback_one(name):
+                config, fmt = rollbacks[name]
+                try:
+                    transport_push_full(name, config)
+                    return name, True, None
+                except Exception as e:
+                    return name, False, str(e)
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+                futures = {pool.submit(rollback_one, n): n for n in manual_rollback}
+                for future in concurrent.futures.as_completed(futures):
+                    name, success, error = future.result()
+                    if success:
+                        print(f"  {name}: ROLLED BACK")
+                    else:
+                        print(f"  {name}: ROLLBACK FAILED — {error} (MANUAL INTERVENTION NEEDED)")
+
+        print(f"\nDELETE FAILED — devices rolled back.")
+        return 1
+
+    else:
+        if pending_confirm:
+            print("Stage 4: Confirming deletes...")
+            for name in sorted(pending_confirm):
+                try:
+                    transport_confirm(name)
+                    print(f"  {name}: CONFIRMED")
+                except Exception as e:
+                    print(f"  {name}: CONFIRM FAILED — {e}")
+                    failed_devices.add(name)
+
+            if failed_devices:
+                print(f"\nDELETE FAILED — some devices could not be confirmed.")
+                return 1
+            print()
+
+    # --- Stage 5: Sync ---
+    print("Stage 5: Syncing configs/...")
+    for name in all_devices:
+        try:
+            config, fmt = transport_pull(name)
+            if fmt == "json":
+                save_config(name, config)
+            else:
+                CONFIGS_DIR.mkdir(parents=True, exist_ok=True)
+                path = CONFIGS_DIR / f"{name}.xml"
+                with open(path, "w") as f:
+                    f.write(config)
+            print(f"  {name}: synced")
+        except Exception as e:
+            print(f"  {name}: sync failed — {e}")
+
+    print(f"\nDELETE COMPLETE — {stack_name}")
+    print(f"  {len(jobs)} services removed from {len(all_devices)} devices")
+    return 0
 
 
 def cmd_stack_list(args):
@@ -346,7 +1820,7 @@ def cmd_stack_list(args):
         print("No stacks defined. Create directories in stacks/")
         return
 
-    print(f"{'Stack':<25} {'Atomic':<10} {'Devices':<8} Description")
+    print(f"{'Stack':<25} {'Atomic':<10} {'Services':<10} Description")
     print("-" * 80)
     for d in sorted(STACKS_DIR.iterdir()):
         stack_file = d / "stack.yaml"
@@ -355,10 +1829,14 @@ def cmd_stack_list(args):
         stack = yaml.safe_load(open(stack_file))
         name = stack.get("name", d.name)
         atomic = "yes" if stack.get("atomic", True) else "no"
-        devices = len(stack.get("devices", []))
+        services = len(stack.get("services", []))
         desc = stack.get("description", "")
-        print(f"{name:<25} {atomic:<10} {devices:<8} {desc}")
+        print(f"{name:<25} {atomic:<10} {services:<10} {desc}")
 
+
+# ---------------------------------------------------------------------------
+# Single-device commands
+# ---------------------------------------------------------------------------
 
 def cmd_diff(args):
     """Compare local config file vs live device."""
@@ -367,14 +1845,16 @@ def cmd_diff(args):
     local_config = load_config(device_name)
 
     print(f"Pulling live config from {device_name}...")
-    live_config = gnmi_pull(device)
+    live_config, fmt = transport_pull(device_name)
 
-    # Deep compare
+    if fmt != "json":
+        print(f"Diff only supported for gNMI (JSON) devices currently.")
+        return 1
+
     try:
         from deepdiff import DeepDiff
         diff = DeepDiff(live_config, local_config, ignore_order=True)
     except ImportError:
-        # Fallback: simple JSON comparison
         if json.dumps(live_config, sort_keys=True) == json.dumps(local_config, sort_keys=True):
             diff = {}
         else:
@@ -410,9 +1890,12 @@ def cmd_validate(args):
     local_config = load_config(device_name)
 
     print(f"Validating {device_name} ({device['hostname']})...")
-    live_config = gnmi_pull(device)
+    live_config, fmt = transport_pull(device_name)
 
-    # Compare
+    if fmt != "json":
+        print(f"Validation only supported for gNMI (JSON) devices currently.")
+        return 1
+
     local_str = json.dumps(local_config, sort_keys=True)
     live_str = json.dumps(live_config, sort_keys=True)
 
@@ -421,8 +1904,8 @@ def cmd_validate(args):
         return 0
     else:
         print(f"DRIFT: {device_name} does not match config file")
-        print(f"  Run 'shim diff {device_name}' for details")
-        print(f"  Run 'shim push {device_name}' to fix")
+        print(f"  Run 'nsci diff {device_name}' for details")
+        print(f"  Run 'nsci push {device_name}' to fix")
         return 1
 
 
@@ -433,7 +1916,6 @@ def cmd_show(args):
     section = args.section
 
     if not section:
-        # Top-level overview
         print(f"{device_name} config sections:")
         print()
         for key in sorted(config.keys()):
@@ -449,7 +1931,6 @@ def cmd_show(args):
             print()
         return
 
-    # Navigate to the section
     current = config
     parts = section.strip("/").split("/")
     for part in parts:
@@ -489,7 +1970,6 @@ def cmd_show(args):
                 print(f"Available: {ids}")
                 return 1
 
-    # Display the result
     _show_section(current)
 
 
@@ -531,24 +2011,17 @@ def cmd_status(args):
     print(f"{'Device':<20} {'Hostname':<18} {'Driver':<18} {'Config File'}")
     print("-" * 75)
     for name, device in inventory.items():
-        path = config_path(name)
-        if path.exists():
-            size = path.stat().st_size
+        json_path = config_path(name)
+        xml_path = CONFIGS_DIR / f"{name}.xml"
+        if json_path.exists():
+            size = json_path.stat().st_size
             state = f"{size // 1024}KB"
+        elif xml_path.exists():
+            size = xml_path.stat().st_size
+            state = f"{size // 1024}KB (xml)"
         else:
             state = "not pulled"
         print(f"{name:<20} {device.get('hostname', '?'):<18} {device.get('driver', '?'):<18} {state}")
-
-
-def _git(cmd):
-    """Run a git command and return stdout."""
-    result = subprocess.run(
-        ["git"] + cmd,
-        cwd=str(REPO_ROOT),
-        capture_output=True,
-        text=True,
-    )
-    return result.stdout.strip(), result.returncode
 
 
 def cmd_history(args):
@@ -573,7 +2046,6 @@ def cmd_history(args):
     print(f"To rollback: nsci rollback {device_name} <number>")
     print(f"To see diff: nsci history {device_name} --diff <number>")
 
-    # Show diff for a specific version if requested
     if args.diff is not None:
         idx = args.diff
         if idx >= len(lines):
@@ -581,13 +2053,7 @@ def cmd_history(args):
             return 1
 
         commit_hash = lines[idx].split()[0]
-
-        if idx == 0:
-            # Diff current vs previous
-            diff_out, _ = _git(["diff", f"{commit_hash}~1", commit_hash, "--", path])
-        else:
-            # Diff that version vs the one before it
-            diff_out, _ = _git(["diff", f"{commit_hash}~1", commit_hash, "--", path])
+        diff_out, _ = _git(["diff", f"{commit_hash}~1", commit_hash, "--", path])
 
         if diff_out:
             print()
@@ -611,7 +2077,6 @@ def cmd_rollback(args):
     path = f"configs/{device_name}.json"
     version = args.version
 
-    # Get commit history for this file
     output, rc = _git(["log", "--pretty=format:%H  %ar  %s", "--", path])
     if rc != 0 or not output:
         print(f"No history for {device_name}")
@@ -634,7 +2099,6 @@ def cmd_rollback(args):
     print(f"  {target_desc}")
     print()
 
-    # Show what will change
     current_hash = commits[0].split()[0]
     diff_out, _ = _git(["diff", current_hash, target_hash, "--", path])
     if diff_out:
@@ -645,41 +2109,44 @@ def cmd_rollback(args):
         print(f"  No differences (configs are identical)")
         return 0
 
-    # Restore the file from that commit
     file_content, rc = _git(["show", f"{target_hash}:{path}"])
     if rc != 0:
         print(f"Error: could not read {path} from commit {target_hash}")
         return 1
 
-    # Write it
     config_path(device_name).write_text(file_content)
     print(f"  Restored configs/{device_name}.json to version {version}")
 
-    # Commit the rollback
     _git(["add", path])
     msg = f"Rollback {device_name} to version {version} ({target_hash[:7]})"
     _git(["commit", "-m", msg])
     print(f"  Committed: {msg}")
 
-    # Push to device if requested (manual mode — engineer pushes directly)
-    if args.push:
+    if args.no_push:
+        print()
+        print(f"Config file restored to version {version} (file only, device not touched).")
+        print(f"Next: open a PR, merge → CI deploys. Or run 'nsci push {device_name}'.")
+    else:
         print()
         print(f"Pushing rollback to {device_name}...")
-        device = get_device(device_name)
         config = json.loads(file_content)
         try:
-            gnmi_push(device, config)
-            print(f"  PUSHED to device — {device_name} restored to version {version}")
+            transport_push_full(device_name, config)
+            print(f"  PUSHED — {device_name} restored to version {version}")
         except Exception as e:
             print(f"  PUSH FAILED: {e}")
             print(f"  Config file is rolled back but device was not updated.")
             print(f"  Run 'nsci push {device_name}' to retry.")
             return 1
-    else:
-        # CI mode — file is rolled back, commit to a branch, let CI deploy
-        print()
-        print(f"Config file restored to version {version}.")
-        print(f"Next: commit to a branch, open a PR, merge → CI deploys.")
+
+        # Sync: pull config back so configs/ reflects actual device state
+        try:
+            config_back, fmt = transport_pull(device_name)
+            if fmt == "json":
+                save_config(device_name, config_back)
+            print(f"  Synced configs/{device_name}.json with live device")
+        except Exception as e:
+            print(f"  Warning: post-push sync failed — {e}")
 
 
 def cmd_library(args):
@@ -701,14 +2168,24 @@ def cmd_library(args):
 
         print(f"Service: {schema.get('name', args.service)}")
         print(f"Description: {schema.get('description', '')}")
-        print(f"Platforms: {', '.join(schema.get('platforms', []))}")
+        if schema.get("path"):
+            print(f"Target path: {schema['path']} (replace)")
+
+        templates = schema.get("templates", {})
+        if templates:
+            print(f"Templates:")
+            for fmt, filename in templates.items():
+                print(f"  {fmt}: {filename}")
         print()
+
+        print("Variables:")
         for var_name, var_def in schema.get("variables", {}).items():
             if isinstance(var_def, dict):
                 req = "required" if var_def.get("required") else "optional"
-                print(f"  {var_name} ({var_def.get('type', '?')}, {req}): {var_def.get('description', '')}")
+                scope = var_def.get("scope", "shared")
+                print(f"  {var_name} ({var_def.get('type', '?')}, {req}, {scope}): {var_def.get('description', '')}")
     else:
-        print(f"{'Service':<25} {'Platforms':<25} Description")
+        print(f"{'Service':<25} {'Templates':<25} Description")
         print("-" * 80)
         for d in sorted(LIBRARY_DIR.iterdir()):
             if not d.is_dir():
@@ -719,9 +2196,9 @@ def cmd_library(args):
             else:
                 schema = {}
             name = schema.get("name", d.name)
-            platforms = ", ".join(schema.get("platforms", []))
+            templates = ", ".join(schema.get("templates", {}).keys())
             desc = schema.get("description", "")
-            print(f"{name:<25} {platforms:<25} {desc}")
+            print(f"{name:<25} {templates:<25} {desc}")
 
 
 # ---------------------------------------------------------------------------
@@ -729,55 +2206,77 @@ def cmd_library(args):
 # ---------------------------------------------------------------------------
 
 def main():
+    # ? help — network engineers expect '?' for context-sensitive help
+    if len(sys.argv) > 1 and sys.argv[-1] == "?":
+        sys.argv[-1] = "--help"
+
     parser = argparse.ArgumentParser(
         prog="nsci",
         description="NetStacks CI — Git-native network config management",
+        epilog="Tip: use '?' for help (nsci push ?) and Tab for completion.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     sub = parser.add_subparsers(dest="command")
 
-    p = sub.add_parser("pull", help="Pull device config into configs/<device>.json")
-    p.add_argument("device", help="Device name from inventory")
+    # --- Device operations ---
+    p = sub.add_parser("pull", help="Pull device config into configs/")
+    p.add_argument("device", help="Device name from inventory").completer = _complete_devices
 
     p = sub.add_parser("pull-snapshot", help="Save device config to snapshots/ (pre-deploy backup)")
-    p.add_argument("device", help="Device name from inventory")
+    p.add_argument("device", help="Device name from inventory").completer = _complete_devices
 
-    p = sub.add_parser("push", help="Push config file to a single device")
-    p.add_argument("device", help="Device name from inventory")
+    p = sub.add_parser("push", help="Push config file to device(s) — full config replace")
+    p.add_argument("devices", nargs="+", help="Device name(s) from inventory").completer = _complete_devices
+    p.add_argument("--full-replace", action="store_true", help="Required — confirms full config replace")
+    p.add_argument("--workers", type=int, default=10, help="Parallel workers for multi-device (default: 10)")
+    p.add_argument("--no-atomic", action="store_true", help="Skip rollback on failure (multi-device only)")
 
-    p = sub.add_parser("deploy", help="Deploy to multiple devices (parallel + atomic)")
-    p.add_argument("devices", nargs="+", help="Device names to deploy")
-    p.add_argument("--workers", type=int, default=10, help="Parallel workers (default: 10)")
-    p.add_argument("--no-atomic", action="store_true", help="Skip rollback on failure")
+    p = sub.add_parser("diff", help="Compare config file vs live device")
+    p.add_argument("device", help="Device name from inventory").completer = _complete_devices
 
-    p = sub.add_parser("stack-deploy", help="Deploy a stack (from stacks/)")
-    p.add_argument("stack", help="Stack name (e.g. l3vpn-cust-a)")
+    p = sub.add_parser("validate", help="Check if device matches config file")
+    p.add_argument("device", help="Device name from inventory").completer = _complete_devices
+
+    p = sub.add_parser("show", help="Browse device config readably")
+    p.add_argument("device", help="Device name from inventory").completer = _complete_devices
+    p.add_argument("section", nargs="?", help="Config section path (e.g. system/ntp)")
+
+    # --- Stack operations ---
+    p = sub.add_parser("stack-render", help="Render all templates in a stack (dry run)")
+    p.add_argument("stack", help="Stack name").completer = _complete_stacks
+    p.add_argument("--delete", action="store_true", help="Show delete payloads instead of deploy")
+
+    p = sub.add_parser("stack-deploy", help="Render + push a stack to devices")
+    p.add_argument("stack", help="Stack name").completer = _complete_stacks
+
+    p = sub.add_parser("stack-delete", help="Remove all config deployed by a stack")
+    p.add_argument("stack", help="Stack name").completer = _complete_stacks
 
     sub.add_parser("stack-list", help="List available stacks")
 
-    p = sub.add_parser("diff", help="Compare config file vs live device")
-    p.add_argument("device", help="Device name from inventory")
-
-    p = sub.add_parser("validate", help="Check if device matches config file")
-    p.add_argument("device", help="Device name from inventory")
-
-    p = sub.add_parser("show", help="Browse device config readably")
-    p.add_argument("device", help="Device name from inventory")
-    p.add_argument("section", nargs="?", help="Config section path (e.g. system/ntp)")
-
+    # --- History ---
     p = sub.add_parser("history", help="Show change history for a device")
-    p.add_argument("device", help="Device name from inventory")
+    p.add_argument("device", help="Device name from inventory").completer = _complete_devices
     p.add_argument("--count", type=int, default=10, help="Number of versions to show")
     p.add_argument("--diff", type=int, default=None, metavar="N", help="Show diff for version N")
 
     p = sub.add_parser("rollback", help="Rollback device to a previous version")
-    p.add_argument("device", help="Device name from inventory")
-    p.add_argument("version", type=int, help="Version number from 'shim history'")
-    p.add_argument("--push", action="store_true", help="Also push rollback to device immediately")
+    p.add_argument("device", help="Device name from inventory").completer = _complete_devices
+    p.add_argument("version", type=int, help="Version number from 'nsci history'")
+    p.add_argument("--no-push", action="store_true", help="Only restore the file, don't push to device")
 
+    # --- Info ---
     sub.add_parser("status", help="Show all devices and config state")
 
     p = sub.add_parser("library", help="Browse service templates")
-    p.add_argument("service", nargs="?", help="Service name for details")
+    p.add_argument("service", nargs="?", help="Service name for details").completer = _complete_services
+
+    # Tab completion (requires: pip install argcomplete)
+    try:
+        import argcomplete
+        argcomplete.autocomplete(parser)
+    except ImportError:
+        pass
 
     args = parser.parse_args()
     if not args.command:
@@ -788,8 +2287,9 @@ def main():
         "pull": cmd_pull,
         "pull-snapshot": cmd_pull_snapshot,
         "push": cmd_push,
-        "deploy": cmd_deploy,
+        "stack-render": cmd_stack_render,
         "stack-deploy": cmd_stack_deploy,
+        "stack-delete": cmd_stack_delete,
         "stack-list": cmd_stack_list,
         "diff": cmd_diff,
         "validate": cmd_validate,

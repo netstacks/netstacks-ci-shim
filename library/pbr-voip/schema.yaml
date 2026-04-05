@@ -1,0 +1,48 @@
+# Service: pbr-voip
+# Stack references this as: service: pbr-voip
+#
+# Policy-based routing / filter-based forwarding for VoIP traffic.
+# Junos-native — no OpenConfig equivalent for FBF.
+# Other platforms would need their own platform-specific templates.
+
+name: pbr-voip
+description: VoIP traffic steering via policy-based routing
+
+path: /junos-conf:configuration/firewall
+
+templates:
+  xml: template.junos.xml.j2    # Junos-native NETCONF
+
+variables:
+  filter_name:
+    type: string
+    required: true
+    scope: device
+    description: Firewall filter name
+    example: "ACME-VOIP-FBF"
+
+  routing_instance:
+    type: string
+    required: true
+    scope: device
+    description: VRF / routing-instance to apply filter in
+    example: "ACME-VRF"
+
+  rules:
+    type: list
+    required: true
+    scope: device
+    description: Filter rules (match + action)
+    items:
+      name:
+        type: string
+        required: true
+        description: Rule name
+      match:
+        type: object
+        required: false
+        description: Match conditions (protocol, dst_port, dst_port_range, src_prefix, dst_prefix)
+      action:
+        type: object
+        required: true
+        description: Action (forwarding_class)

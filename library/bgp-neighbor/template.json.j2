@@ -1,0 +1,31 @@
+{
+  "global": {
+    "config": {
+      "as": {{ bgp_as }},
+      "router-id": "{{ router_id }}"
+    }
+  },
+  "neighbors": {
+    "neighbor": [
+      {%- for neighbor in bgp_neighbors %}
+      {
+        "neighbor-address": "{{ neighbor.address }}",
+        "config": {
+          "neighbor-address": "{{ neighbor.address }}",
+          "peer-as": {{ neighbor.remote_as }}
+          {%- if neighbor.get('description') %},
+          "description": "{{ neighbor.description }}"
+          {%- endif %}
+        }
+        {%- if neighbor.get('update_source') %},
+        "transport": {
+          "config": {
+            "local-address": "{{ neighbor.update_source }}"
+          }
+        }
+        {%- endif %}
+      }{% if not loop.last %},{% endif %}
+      {%- endfor %}
+    ]
+  }
+}

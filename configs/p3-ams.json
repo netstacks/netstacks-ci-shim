@@ -3722,31 +3722,6 @@
         "severity": "DEBUG"
       }
     },
-    "ntp": {
-      "servers": {
-        "server": [
-          {
-            "address": "10.0.0.1",
-            "config": {
-              "address": "10.0.0.1"
-            }
-          },
-          {
-            "address": "10.0.0.2",
-            "config": {
-              "address": "10.0.0.2",
-              "prefer": true
-            }
-          },
-          {
-            "address": "10.0.0.3",
-            "config": {
-              "address": "10.0.0.3"
-            }
-          }
-        ]
-      }
-    },
     "arista-system-session:session": {
       "config": {
         "enable-config-terminal": true,

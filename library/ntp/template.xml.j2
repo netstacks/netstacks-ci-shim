@@ -1,19 +1,15 @@
-<config>
-  <system xmlns="http://openconfig.net/yang/system">
-    <ntp>
-      <servers>
-        {%- for server in ntp_servers %}
-        <server>
-          <address>{{ server.address }}</address>
-          <config>
-            <address>{{ server.address }}</address>
-            {%- if server.get('prefer') %}
-            <prefer>true</prefer>
-            {%- endif %}
-          </config>
-        </server>
-        {%- endfor %}
-      </servers>
-    </ntp>
-  </system>
-</config>
+<ntp xmlns="http://openconfig.net/yang/system" xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0" nc:operation="replace">
+  <servers>
+    {%- for server in ntp_servers %}
+    <server>
+      <address>{{ server.address }}</address>
+      <config>
+        <address>{{ server.address }}</address>
+        {%- if server.get('prefer') %}
+        <prefer>true</prefer>
+        {%- endif %}
+      </config>
+    </server>
+    {%- endfor %}
+  </servers>
+</ntp>

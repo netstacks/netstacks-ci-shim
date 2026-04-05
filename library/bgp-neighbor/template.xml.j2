@@ -1,0 +1,29 @@
+<bgp xmlns="http://openconfig.net/yang/network-instance">
+  <global>
+    <config>
+      <as>{{ bgp_as }}</as>
+      <router-id>{{ router_id }}</router-id>
+    </config>
+  </global>
+  <neighbors>
+    {%- for neighbor in bgp_neighbors %}
+    <neighbor>
+      <neighbor-address>{{ neighbor.address }}</neighbor-address>
+      <config>
+        <neighbor-address>{{ neighbor.address }}</neighbor-address>
+        <peer-as>{{ neighbor.remote_as }}</peer-as>
+        {%- if neighbor.get('description') %}
+        <description>{{ neighbor.description }}</description>
+        {%- endif %}
+      </config>
+      {%- if neighbor.get('update_source') %}
+      <transport>
+        <config>
+          <local-address>{{ neighbor.update_source }}</local-address>
+        </config>
+      </transport>
+      {%- endif %}
+    </neighbor>
+    {%- endfor %}
+  </neighbors>
+</bgp>

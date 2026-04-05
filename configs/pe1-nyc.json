@@ -3034,23 +3034,6 @@
               "name": "DIRECTLY_CONNECTED"
             },
             {
-              "arista-bfd-augments:bfd": {
-                "micro-bfd-sessions": {
-                  "micro-bfd-session": [
-                    {
-                      "member-interface": "Ethernet1"
-                    }
-                  ]
-                }
-              },
-              "config": {
-                "identifier": "arista-bfd-augments:BFD",
-                "name": "BFD"
-              },
-              "identifier": "arista-bfd-augments:BFD",
-              "name": "BFD"
-            },
-            {
               "config": {
                 "identifier": "openconfig-policy-types:STATIC",
                 "name": "STATIC"
@@ -3085,8 +3068,8 @@
               "bgp": {
                 "global": {
                   "config": {
-                    "as": 4444,
-                    "router-id": "10.255.0.14"
+                    "as": 65000,
+                    "router-id": "10.255.0.1"
                   }
                 },
                 "neighbors": {
@@ -3434,6 +3417,23 @@
                 }
               },
               "name": "CORE"
+            },
+            {
+              "arista-bfd-augments:bfd": {
+                "micro-bfd-sessions": {
+                  "micro-bfd-session": [
+                    {
+                      "member-interface": "Ethernet1"
+                    }
+                  ]
+                }
+              },
+              "config": {
+                "identifier": "arista-bfd-augments:BFD",
+                "name": "BFD"
+              },
+              "identifier": "arista-bfd-augments:BFD",
+              "name": "BFD"
             }
           ]
         },

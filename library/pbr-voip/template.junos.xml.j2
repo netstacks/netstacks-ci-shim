@@ -1,0 +1,66 @@
+<configuration xmlns="http://xml.juniper.net/xnm/1.1/xnm" xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0">
+  <firewall>
+    <family>
+      <inet>
+        <filter nc:operation="replace">
+          <name>{{ filter_name }}</name>
+          {%- for rule in rules %}
+          <term>
+            <name>{{ rule.name }}</name>
+            {%- if rule.get('match') %}
+            <from>
+              {%- if rule.match.get('protocol') %}
+              <protocol>{{ rule.match.protocol }}</protocol>
+              {%- endif %}
+              {%- if rule.match.get('dst_port') %}
+              <destination-port>{{ rule.match.dst_port }}</destination-port>
+              {%- endif %}
+              {%- if rule.match.get('dst_port_range') %}
+              <destination-port>{{ rule.match.dst_port_range }}</destination-port>
+              {%- endif %}
+              {%- if rule.match.get('src_prefix') %}
+              <source-address>
+                <name>{{ rule.match.src_prefix }}</name>
+              </source-address>
+              {%- endif %}
+              {%- if rule.match.get('dst_prefix') %}
+              <destination-address>
+                <name>{{ rule.match.dst_prefix }}</name>
+              </destination-address>
+              {%- endif %}
+            </from>
+            {%- endif %}
+            <then>
+              {%- if rule.action.get('forwarding_class') %}
+              <forwarding-class>{{ rule.action.forwarding_class }}</forwarding-class>
+              <accept/>
+              {%- else %}
+              <accept/>
+              {%- endif %}
+            </then>
+          </term>
+          {%- endfor %}
+        </filter>
+      </inet>
+    </family>
+  </firewall>
+  {%- if routing_instance %}
+  <routing-instances>
+    <instance>
+      <name>{{ routing_instance }}</name>
+      <interface>
+        <name>all</name>
+        <family>
+          <inet>
+            <filter nc:operation="merge">
+              <input>
+                <filter-name>{{ filter_name }}</filter-name>
+              </input>
+            </filter>
+          </inet>
+        </family>
+      </interface>
+    </instance>
+  </routing-instances>
+  {%- endif %}
+</configuration>

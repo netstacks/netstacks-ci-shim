@@ -1,18 +1,53 @@
-# NTP standardization across all EOS devices
+# Baseline stack — standard services pushed to all devices
 #
 # Independent per device — one failure doesn't affect the rest.
 
-name: baseline-ntp
-description: NTP server standardization
+name: baseline
+description: Baseline device standardization
 atomic: false
 
-devices:
-  - rr1-nyc
-  - p1-nyc
-  - p2-chi
-  - p3-ams
-  - pe1-nyc
-  - pe2-nyc
-  - pe3-chi
-  - pe4-dal
-  - sw1-chi-techcorp
+services:
+  - service: ntp
+    variables:
+      ntp_servers:
+        - address: 10.0.0.1
+          prefer: true
+        - address: 10.0.0.2
+        - address: 10.0.0.3
+    devices:
+      - rr1-nyc
+      - p1-nyc
+      - p2-chi
+      - p3-ams
+      - pe1-nyc
+      - pe2-nyc
+      - pe3-chi
+      - pe4-dal
+      # - ce1-nyc-globalbank  # temporarily offline
+      - sw1-chi-techcorp
+
+  # SNMP commented out — Arista EOS doesn't support OpenConfig SNMP model via gNMI
+  # - service: snmp
+  #   variables:
+  #     snmp_contact: "netops-team"
+  #     snmp_community: "netstacks-ro"
+  #     snmp_community_access: ro
+  #   devices:
+  #     rr1-nyc:
+  #       snmp_location: "NYC-DC1-Row3-Rack12"
+  #     p1-nyc:
+  #       snmp_location: "NYC-DC1-Row3-Rack14"
+  #     p2-chi:
+  #       snmp_location: "CHI-DC2-Row1-Rack8"
+  #     p3-ams:
+  #       snmp_location: "AMS-DC3-Row2-Rack3"
+  #     pe1-nyc:
+  #       snmp_location: "NYC-DC1-Row5-Rack1"
+  #     pe2-nyc:
+  #       snmp_location: "NYC-DC1-Row5-Rack2"
+  #     pe3-chi:
+  #       snmp_location: "CHI-DC2-Row1-Rack10"
+  #     pe4-dal:
+  #       snmp_location: "DAL-DC4-Row1-Rack1"
+  #     sw1-chi-techcorp:
+  #       snmp_location: "CHI-TechCorp-MDF"

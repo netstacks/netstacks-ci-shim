@@ -3343,23 +3343,6 @@
               "name": "BGP"
             },
             {
-              "arista-bfd-augments:bfd": {
-                "micro-bfd-sessions": {
-                  "micro-bfd-session": [
-                    {
-                      "member-interface": "Ethernet1"
-                    }
-                  ]
-                }
-              },
-              "config": {
-                "identifier": "arista-bfd-augments:BFD",
-                "name": "BFD"
-              },
-              "identifier": "arista-bfd-augments:BFD",
-              "name": "BFD"
-            },
-            {
               "config": {
                 "enabled": true,
                 "identifier": "openconfig-policy-types:ISIS",
@@ -3611,6 +3594,23 @@
                   }
                 ]
               }
+            },
+            {
+              "arista-bfd-augments:bfd": {
+                "micro-bfd-sessions": {
+                  "micro-bfd-session": [
+                    {
+                      "member-interface": "Ethernet1"
+                    }
+                  ]
+                }
+              },
+              "config": {
+                "identifier": "arista-bfd-augments:BFD",
+                "name": "BFD"
+              },
+              "identifier": "arista-bfd-augments:BFD",
+              "name": "BFD"
             }
           ]
         },

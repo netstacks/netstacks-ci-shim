@@ -1,0 +1,26 @@
+{
+  "static": [
+    {%- for route in routes %}
+    {
+      "prefix": "{{ route.prefix }}",
+      "config": {
+        "prefix": "{{ route.prefix }}"
+        {%- if route.get('description') %},
+        "description": "{{ route.description }}"
+        {%- endif %}
+      },
+      "next-hops": {
+        "next-hop": [
+          {
+            "index": "{{ route.next_hop }}",
+            "config": {
+              "index": "{{ route.next_hop }}",
+              "next-hop": "{{ route.next_hop }}"
+            }
+          }
+        ]
+      }
+    }{% if not loop.last %},{% endif %}
+    {%- endfor %}
+  ]
+}

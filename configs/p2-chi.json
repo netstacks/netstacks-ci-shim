@@ -3192,26 +3192,6 @@
               "name": "DIRECTLY_CONNECTED"
             },
             {
-              "arista-bfd-augments:bfd": {
-                "micro-bfd-sessions": {
-                  "micro-bfd-session": [
-                    {
-                      "member-interface": "Ethernet1"
-                    },
-                    {
-                      "member-interface": "Ethernet3"
-                    }
-                  ]
-                }
-              },
-              "config": {
-                "identifier": "arista-bfd-augments:BFD",
-                "name": "BFD"
-              },
-              "identifier": "arista-bfd-augments:BFD",
-              "name": "BFD"
-            },
-            {
               "config": {
                 "identifier": "openconfig-policy-types:STATIC",
                 "name": "STATIC"
@@ -3741,6 +3721,26 @@
               },
               "identifier": "openconfig-policy-types:BGP",
               "name": "BGP"
+            },
+            {
+              "arista-bfd-augments:bfd": {
+                "micro-bfd-sessions": {
+                  "micro-bfd-session": [
+                    {
+                      "member-interface": "Ethernet1"
+                    },
+                    {
+                      "member-interface": "Ethernet3"
+                    }
+                  ]
+                }
+              },
+              "config": {
+                "identifier": "arista-bfd-augments:BFD",
+                "name": "BFD"
+              },
+              "identifier": "arista-bfd-augments:BFD",
+              "name": "BFD"
             }
           ]
         },

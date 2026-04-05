@@ -1,0 +1,17 @@
+{
+  "servers": {
+    "server": [
+      {%- for server in ntp_servers %}
+      {
+        "address": "{{ server.address }}",
+        "config": {
+          "address": "{{ server.address }}"
+          {%- if server.get('prefer') %},
+          "prefer": true
+          {%- endif %}
+        }
+      }{% if not loop.last %},{% endif %}
+      {%- endfor %}
+    ]
+  }
+}

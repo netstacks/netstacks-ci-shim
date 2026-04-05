@@ -180,6 +180,20 @@ log_profile: default
 
 You can use both approaches in the same repo. Templates generate config that gets merged into device JSON files. Direct edits modify the files by hand.
 
+## Delete Support
+
+All templates support `nsci stack-delete` using the same deploy template. No separate delete templates needed.
+
+**OpenConfig templates** (NTP, SNMP, BGP Neighbor, BGP Import Policy) — delete works automatically. nsci walks the rendered output and builds per-item deletes.
+
+**Vendor-native templates** (PBR/VoIP, firewall rules, etc.) — require explicit `nc:operation` attributes (`merge` or `replace`) on every operational XML element. At delete time, nsci swaps all operations to `delete`. Templates without explicit `nc:operation` are rejected at render time.
+
+Preview what a delete will do:
+
+```bash
+nsci stack-render l3vpn-cust-a --delete
+```
+
 ## See Also
 
 - [[Writing Templates]] — How to create new templates

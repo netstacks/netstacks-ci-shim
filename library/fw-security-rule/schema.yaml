@@ -1,53 +1,68 @@
+# Service: fw-security-rule
+# Stack references this as: service: fw-security-rule
+# Palo Alto only — no generic OpenConfig equivalent
+
 name: fw-security-rule
 description: Palo Alto firewall security policy rule
-platforms: [paloalto]
-transport: rest_api
+
+path: /restapi/v10.2/Policies/SecurityRules
+
+templates:
+  paloalto.rest: template.paloalto.rest.j2   # Palo Alto REST API
 
 variables:
   rule_name:
     type: string
     required: true
+    scope: device
     description: Name of the security rule
     example: "allow-web-traffic"
 
   src_zones:
     type: list
     required: true
+    scope: device
     description: Source security zones
     example: ["trust"]
 
   dst_zones:
     type: list
     required: true
+    scope: device
     description: Destination security zones
     example: ["untrust"]
 
   src_addresses:
     type: list
     required: true
+    scope: device
     description: Source addresses or address groups
     example: ["10.0.0.0/8"]
 
   dst_addresses:
     type: list
     required: true
+    scope: device
     description: Destination addresses or address groups
     example: ["any"]
 
   applications:
     type: list
     required: true
+    scope: device
     description: Application signatures to allow
     example: ["web-browsing", "ssl"]
 
   action:
     type: string
     required: true
+    scope: device
     description: Rule action
     choices: [allow, deny, drop, reset-client, reset-server, reset-both]
 
   log_profile:
     type: string
     required: false
+    scope: shared
     description: Log forwarding profile
     default: "default"

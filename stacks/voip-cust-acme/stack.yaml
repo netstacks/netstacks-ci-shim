@@ -1,0 +1,84 @@
+# Hosted VoIP — ACME Corp
+#
+# Full L3VPN service with QoS traffic steering:
+#   PE (Juniper):  static routes + import policy + PBR/FBF for VoIP CoS
+#   CE (Arista):   BGP peering back to PE
+#
+# PE gets commit-confirm via NETCONF (auto-rollback on failure).
+# CE gets gNMI push (immediate).
+
+name: voip-cust-acme
+description: Hosted VoIP service for ACME Corp — L3VPN with QoS routing
+atomic: true
+
+services:
+  # 1. Static routes on PE — point customer prefixes to CE next-hop
+  - service: static-route
+    variables:
+      network_instance: ACME-VRF
+      routes:
+        - prefix: 10.200.1.0/24
+          next_hop: 172.16.0.2
+          description: "ACME-VoIP-LAN"
+        - prefix: 10.200.2.0/24
+          next_hop: 172.16.0.2
+          description: "ACME-VoIP-MGMT"
+    devices:
+      - pe5-nyc
+
+  # 2. BGP neighbor on CE toward PE
+  - service: bgp-neighbor
+    variables:
+      bgp_as: 65100
+    devices:
+      ce1-acme:
+        router_id: "172.16.0.2"
+        bgp_neighbors:
+          - address: 172.16.0.1
+            remote_as: 65000
+            update_source: Ethernet1
+            description: "TO-PE5-NYC"
+
+  # 3. BGP import policy on PE for customer communities
+  - service: bgp-import-policy
+    devices:
+      pe5-nyc:
+        policy_name: ACME-VOIP-IMPORT
+        community_lists:
+          - name: ACME-VOIP-COMMS
+            members:
+              - "65100:100"
+              - "65100:200"
+        statements:
+          - sequence: "10"
+            match_community: ACME-VOIP-COMMS
+            set_local_pref: 200
+            action: permit
+          - sequence: "99"
+            action: deny
+
+  # 4. PBR / filter-based forwarding on PE for VoIP CoS
+  #    Juniper-native — nsci picks template.junos.xml.j2 automatically
+  #    Template uses nc:operation="replace" on the <filter> element
+  #    to replace the named filter while merging into firewall config
+  - service: pbr-voip
+    devices:
+      pe5-nyc:
+        filter_name: ACME-VOIP-FBF
+        routing_instance: ACME-VRF
+        rules:
+          - name: VOIP-SIGNALING
+            match:
+              protocol: udp
+              dst_port: 5060
+            action:
+              forwarding_class: expedited-forwarding
+          - name: VOIP-RTP
+            match:
+              protocol: udp
+              dst_port_range: "16384-32768"
+            action:
+              forwarding_class: expedited-forwarding
+          - name: DEFAULT
+            action:
+              forwarding_class: best-effort

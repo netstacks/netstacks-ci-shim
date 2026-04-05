@@ -1,13 +1,74 @@
 # L3VPN for Customer A
 #
-# This stack spans PE1, PE2, and CE1.
-# All three must succeed or all get rolled back.
+# This stack bundles all the services needed to stand up an L3VPN:
+# BGP peering, import policy, and NTP baseline.
+# All devices must succeed or all get rolled back.
 
 name: l3vpn-cust-a
 description: L3VPN service for Customer A
 atomic: true
 
-devices:
-  - pe1-nyc
-  - pe2-nyc
-  - ce1-nyc-globalbank
+services:
+  - service: bgp-neighbor
+    variables:
+      bgp_as: 65000
+    devices:
+      pe1-nyc:
+        router_id: "10.255.0.1"
+        bgp_neighbors:
+          - address: "10.255.0.2"
+            remote_as: 65000
+            update_source: Loopback0
+            description: "PE2-NYC iBGP"
+      pe2-nyc:
+        router_id: "10.255.0.2"
+        bgp_neighbors:
+          - address: "10.255.0.1"
+            remote_as: 65000
+            update_source: Loopback0
+            description: "PE1-NYC iBGP"
+      # ce1-nyc-globalbank:  # temporarily offline
+      #   router_id: "10.100.0.1"
+      #   bgp_neighbors:
+      #     - address: "10.100.0.2"
+      #       remote_as: 65000
+      #       update_source: GigabitEthernet0/0
+      #       description: "PE1-NYC eBGP to provider"
+
+  - service: bgp-import-policy
+    devices:
+      pe1-nyc:
+        policy_name: CUST-A-IMPORT
+        community_lists:
+          - name: CUST-A-COMMS
+            members: ["65000:100", "65000:200"]
+        statements:
+          - sequence: 10
+            action: permit
+            match_community: CUST-A-COMMS
+            set_local_pref: 200
+          - sequence: 999
+            action: deny
+      pe2-nyc:
+        policy_name: CUST-A-IMPORT
+        community_lists:
+          - name: CUST-A-COMMS
+            members: ["65000:100", "65000:200"]
+        statements:
+          - sequence: 10
+            action: permit
+            match_community: CUST-A-COMMS
+            set_local_pref: 200
+          - sequence: 999
+            action: deny
+
+  - service: ntp
+    variables:
+      ntp_servers:
+        - address: 10.0.0.1
+          prefer: true
+        - address: 10.0.0.2
+    devices:
+      - pe1-nyc
+      - pe2-nyc
+      # - ce1-nyc-globalbank  # temporarily offline

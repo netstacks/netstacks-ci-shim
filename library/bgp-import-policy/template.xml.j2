@@ -1,68 +1,66 @@
-<config>
-  <routing-policy xmlns="http://openconfig.net/yang/routing-policy">
-    <defined-sets>
-      <bgp-defined-sets xmlns="http://openconfig.net/yang/bgp-policy">
-        <community-sets>
-          {%- for comm_list in community_lists %}
-          <community-set>
+<routing-policy xmlns="http://openconfig.net/yang/routing-policy">
+  <defined-sets>
+    <bgp-defined-sets xmlns="http://openconfig.net/yang/bgp-policy">
+      <community-sets>
+        {%- for comm_list in community_lists %}
+        <community-set>
+          <community-set-name>{{ comm_list.name }}</community-set-name>
+          <config>
             <community-set-name>{{ comm_list.name }}</community-set-name>
-            <config>
-              <community-set-name>{{ comm_list.name }}</community-set-name>
-              {%- for member in comm_list.members %}
-              <community-member>{{ member }}</community-member>
-              {%- endfor %}
-            </config>
-          </community-set>
-          {%- endfor %}
-        </community-sets>
-      </bgp-defined-sets>
-    </defined-sets>
-    <policy-definitions>
-      <policy-definition>
+            {%- for member in comm_list.members %}
+            <community-member>{{ member }}</community-member>
+            {%- endfor %}
+          </config>
+        </community-set>
+        {%- endfor %}
+      </community-sets>
+    </bgp-defined-sets>
+  </defined-sets>
+  <policy-definitions>
+    <policy-definition>
+      <name>{{ policy_name }}</name>
+      <config>
         <name>{{ policy_name }}</name>
-        <config>
-          <name>{{ policy_name }}</name>
-        </config>
-        <statements>
-          {%- for statement in statements %}
-          <statement>
+      </config>
+      <statements>
+        {%- for statement in statements %}
+        <statement>
+          <name>{{ statement.sequence }}</name>
+          <config>
             <name>{{ statement.sequence }}</name>
-            <config>
-              <name>{{ statement.sequence }}</name>
-            </config>
-            {%- if statement.get('match_community') or statement.get('match_prefix_list') %}
-            <conditions>
-              <bgp-conditions xmlns="http://openconfig.net/yang/bgp-policy">
-                {%- if statement.get('match_community') %}
-                <match-community-set>
-                  <config>
-                    <community-set>{{ statement.match_community }}</community-set>
-                  </config>
-                </match-community-set>
-                {%- endif %}
-              </bgp-conditions>
-            </conditions>
-            {%- endif %}
-            <actions>
-              {%- if statement.get('set_local_pref') %}
-              <bgp-actions xmlns="http://openconfig.net/yang/bgp-policy">
+          </config>
+          {%- if statement.get('match_community') or statement.get('match_prefix_list') %}
+          <conditions>
+            <bgp-conditions xmlns="http://openconfig.net/yang/bgp-policy">
+              {%- if statement.get('match_community') %}
+              <match-community-set>
                 <config>
-                  <set-local-pref>{{ statement.set_local_pref }}</set-local-pref>
+                  <community-set>{{ statement.match_community }}</community-set>
                 </config>
-              </bgp-actions>
+              </match-community-set>
               {%- endif %}
+            </bgp-conditions>
+          </conditions>
+          {%- endif %}
+          <actions>
+            {%- if statement.get('set_local_pref') %}
+            <bgp-actions xmlns="http://openconfig.net/yang/bgp-policy">
               <config>
-                {%- if statement.action == 'permit' %}
-                <policy-result>ACCEPT_ROUTE</policy-result>
-                {%- else %}
-                <policy-result>REJECT_ROUTE</policy-result>
-                {%- endif %}
+                <set-local-pref>{{ statement.set_local_pref }}</set-local-pref>
               </config>
-            </actions>
-          </statement>
-          {%- endfor %}
-        </statements>
-      </policy-definition>
-    </policy-definitions>
-  </routing-policy>
-</config>
+            </bgp-actions>
+            {%- endif %}
+            <config>
+              {%- if statement.action == 'permit' %}
+              <policy-result>ACCEPT_ROUTE</policy-result>
+              {%- else %}
+              <policy-result>REJECT_ROUTE</policy-result>
+              {%- endif %}
+            </config>
+          </actions>
+        </statement>
+        {%- endfor %}
+      </statements>
+    </policy-definition>
+  </policy-definitions>
+</routing-policy>

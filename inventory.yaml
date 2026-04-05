@@ -77,6 +77,16 @@ devices:
       username: cwdavis
       password: viperdavis69
 
+  # --- PE-Routers (Junos) ---
+  pe5-nyc:
+    hostname: 10.1.1.108
+    driver: junos-netconf
+    site: NYC-DataCenter
+    role: PE-Router
+    credential:
+      username: cwdavis
+      password: viperdavis69
+
   # --- CE-Routers (Customer Edge, Cisco IOS — no gNMI support) ---
   ce1-nyc-globalbank:
     hostname: 10.1.1.110
@@ -91,6 +101,15 @@ devices:
     hostname: 10.1.1.111
     driver: cisco-ios
     site: CHI-DataCenter
+    role: CE-Router
+    credential:
+      username: cwdavis
+      password: viperdavis69
+
+  ce1-acme:
+    hostname: 10.1.1.112
+    driver: eos-gnmi
+    site: NYC-DataCenter
     role: CE-Router
     credential:
       username: cwdavis

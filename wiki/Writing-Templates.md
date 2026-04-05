@@ -221,6 +221,51 @@ Produces `"members": ["a", "b", "c"]` from a Python list.
 | gNMI | `template.json.j2` | OpenConfig JSON |
 | REST API | `template.json.j2` | Vendor-specific JSON |
 
+## Delete Support
+
+Templates must support `nsci stack-delete` — teardown using the same deploy template, no separate delete files needed.
+
+### OpenConfig Templates (automatic)
+
+If your template uses OpenConfig namespaces (`xmlns="http://openconfig.net/yang/..."`), delete works automatically:
+- **gNMI:** nsci walks the rendered JSON and builds per-list-item `Set delete` paths (e.g., `.../server[address=10.0.0.1]`)
+- **NETCONF:** nsci injects `nc:operation="delete"` on list item elements (`<server>`, `<neighbor>`, `<static>`, etc.)
+
+No extra work needed. Just write the template normally.
+
+### Vendor-Native Templates (requires explicit `nc:operation`)
+
+If your template does NOT use OpenConfig namespaces (Junos-native, IOS-XE native, etc.), you **must** add explicit `nc:operation` attributes on every operational element:
+
+```xml
+<!-- CORRECT — nsci can swap these to delete -->
+<filter nc:operation="replace">
+  <name>{{ filter_name }}</name>
+  ...
+</filter>
+<filter nc:operation="merge">
+  <input>
+    <filter-name>{{ filter_name }}</filter-name>
+  </input>
+</filter>
+```
+
+```xml
+<!-- WRONG — nsci can't see implicit merge, stack-delete will fail -->
+<filter>
+  <name>{{ filter_name }}</name>
+  ...
+</filter>
+```
+
+**The rule:** If nsci can't see it, nsci can't delete it. Implicit merge operations are invisible to the delete swap.
+
+At `stack-deploy` render time, nsci validates this. If a non-OpenConfig XML template has no `nc:operation` attributes, the render fails with a clear error before anything touches a device.
+
+At `stack-delete` time, nsci swaps all `nc:operation="replace"` and `nc:operation="merge"` to `nc:operation="delete"`. Same template handles both deploy and teardown.
+
+---
+
 ## Testing Your Template
 
 Render it manually to verify the output:

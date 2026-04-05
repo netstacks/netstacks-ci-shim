@@ -1,23 +1,43 @@
+# Service: bgp-neighbor
+# Stack references this as: service: bgp-neighbor
+# Templates are selected by device driver (platform + transport)
+
 name: bgp-neighbor
 description: BGP peering configuration
-platforms: [eos]
+
+path: /openconfig-network-instance:network-instances/network-instance[name={{ network_instance | default('default') }}]/protocols/protocol[identifier=BGP][name=BGP]/bgp
+
+templates:
+  json: template.json.j2        # gNMI (OpenConfig JSON)
+  xml: template.xml.j2          # NETCONF (OpenConfig XML)
 
 variables:
+  network_instance:
+    type: string
+    required: false
+    scope: device
+    description: Network instance / VRF name (defaults to 'default' for global table)
+    default: "default"
+    example: "CUST-A-VRF"
+
   bgp_as:
     type: integer
     required: true
+    scope: shared
     description: Local BGP AS number
     example: 65000
 
   router_id:
     type: string
     required: true
+    scope: device
     description: BGP router ID (usually Loopback0 IP)
     example: "10.255.0.1"
 
   bgp_neighbors:
     type: list
     required: true
+    scope: device
     description: BGP neighbor sessions
     items:
       address:

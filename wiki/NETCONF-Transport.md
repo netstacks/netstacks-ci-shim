@@ -169,6 +169,60 @@ Tested against Arista EOS P3-AMS:
 - Modify statements (remove statement 20, change local-pref on statement 10) via replace
 - Device correctly added, modified, and removed route-map entries from a single replace operation
 
+## Stack Delete (NETCONF)
+
+When `nsci stack-delete` removes config via NETCONF, the mechanism depends on whether the template is OpenConfig or vendor-native.
+
+### OpenConfig Templates — Automatic Injection
+
+nsci injects `nc:operation="delete"` on known list item elements (`<server>`, `<neighbor>`, `<static>`, `<community-set>`, `<policy-definition>`, etc.). Only the specific list items are removed.
+
+```xml
+<!-- What nsci sends to remove an NTP server -->
+<system xmlns="http://openconfig.net/yang/system">
+  <ntp><servers>
+    <server nc:operation="delete">
+      <address>10.0.0.1</address>
+    </server>
+  </servers></ntp>
+</system>
+```
+
+### Vendor-Native Templates — Operation Swap
+
+For non-OpenConfig templates, nsci swaps all existing `nc:operation` attributes to `"delete"`:
+
+- `nc:operation="replace"` → `nc:operation="delete"`
+- `nc:operation="merge"` → `nc:operation="delete"`
+
+Same deploy template handles both deploy and teardown. No separate delete template needed.
+
+**Requirement:** Vendor-native templates must have explicit `nc:operation` on every operational element. Without them, nsci can't see what to swap and the render fails before anything touches a device.
+
+```xml
+<!-- Deploy: filter is replaced, binding is merged -->
+<filter nc:operation="replace">
+  <name>ACME-VOIP-FBF</name>
+  ...
+</filter>
+<filter nc:operation="merge">
+  <input><filter-name>ACME-VOIP-FBF</filter-name></input>
+</filter>
+
+<!-- Delete: nsci swaps both to delete -->
+<filter nc:operation="delete">
+  <name>ACME-VOIP-FBF</name>
+  ...
+</filter>
+<filter nc:operation="delete">
+  <input><filter-name>ACME-VOIP-FBF</filter-name></input>
+</filter>
+```
+
+**The rule:** If nsci can't see it, nsci can't delete it. Implicit merge (no `nc:operation` attribute) is invisible to the swap.
+
+---
+
 ## Troubleshooting
 
 **Connection refused on port 830:**

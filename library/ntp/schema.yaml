@@ -1,10 +1,19 @@
-# Variable schema for the NTP service template.
-# Used by the shim to validate variables before rendering,
-# and by NetStacks UI to generate input forms.
+# Service: ntp
+# Stack references this as: service: ntp
+# Templates are selected by device driver (platform + transport)
 
 name: ntp
 description: NTP server configuration
-platforms: [eos, ios, iosxr]
+
+# The OpenConfig path this service targets.
+# gNMI: Set replace at this path (replaces section, not full config)
+# NETCONF: edit-config with operation="replace" on this element
+path: /openconfig-system:system/ntp
+operation: replace
+
+templates:
+  json: template.json.j2        # gNMI (OpenConfig JSON)
+  xml: template.xml.j2          # NETCONF (OpenConfig XML)
 
 variables:
   ntp_servers:

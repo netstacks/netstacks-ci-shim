@@ -1,0 +1,59 @@
+# Service: bgp-import-policy
+# Stack references this as: service: bgp-import-policy
+# Templates are selected by device driver (platform + transport)
+
+name: bgp-import-policy
+description: BGP import policy with community matching
+
+path: /openconfig-routing-policy:routing-policy
+
+templates:
+  json: template.json.j2        # gNMI (OpenConfig JSON)
+  xml: template.xml.j2          # NETCONF (OpenConfig XML)
+
+variables:
+  policy_name:
+    type: string
+    required: true
+    scope: device
+    description: Name of the routing policy
+    example: "CUST-A-IMPORT"
+
+  community_lists:
+    type: list
+    required: true
+    scope: device
+    description: Community lists referenced by policy statements
+    items:
+      name:
+        type: string
+        required: true
+        description: Community list name
+      members:
+        type: list
+        required: true
+        description: Community string members
+
+  statements:
+    type: list
+    required: true
+    scope: device
+    description: Policy statements (match + action)
+    items:
+      sequence:
+        type: integer
+        required: true
+        description: Statement sequence number
+      action:
+        type: string
+        required: true
+        description: permit or deny
+        choices: [permit, deny]
+      match_community:
+        type: string
+        required: false
+        description: Community list to match
+      set_local_pref:
+        type: integer
+        required: false
+        description: Set local preference value

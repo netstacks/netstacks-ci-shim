@@ -1,6 +1,6 @@
-name: iosxr-netconf
+name: junos-netconf
 transport: netconf
-platform: iosxr
+platform: junos
 
 netconf:
   port: 830
@@ -14,8 +14,8 @@ capabilities:
   rollback_on_error: true
 
 yang_models:
-  native: Cisco-IOS-XR
+  native: junos
   openconfig: true
 
-# IOS-XR supports commit-confirm via NETCONF:
+# Junos supports commit-confirm via NETCONF:
 #   edit-config (candidate) → commit confirmed (timeout) → validate → commit
