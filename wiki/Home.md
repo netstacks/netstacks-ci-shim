@@ -17,35 +17,31 @@ NetStacks CI (`nsci`) manages network device configurations as structured JSON f
 
 ## Core Principles
 
-1. **Structured APIs only.** No SSH. No CLI scraping. No command generation. Devices are managed through gNMI, NETCONF, or REST APIs. The device's own management plane handles adds, removes, and modifications.
+1. **Structured APIs only.** No SSH. No CLI scraping. No command generation. Devices are managed through gNMI, NETCONF, or REST APIs.
 
-2. **Git is the source of truth.** Every device's config is a JSON file in the repo. Every change is a commit. Every deploy is traceable. Rollback is `git revert`.
+2. **Git is the source of truth.** Every device's config is a JSON file in the repo. Every change is a commit. Every deploy is traceable.
 
-3. **The device handles the "how."** You declare what the config should look like. The device figures out what to add, remove, or modify to get there. One `replace` operation — not a sequence of CLI commands.
+3. **The device handles the "how."** You declare what the config should look like. The device figures out what to add, remove, or modify. One `replace` operation — not a sequence of CLI commands.
 
-4. **Stacks for atomic operations.** When a service spans multiple devices (like an L3VPN across PE and CE routers), a stack groups them. Either all devices succeed or all get rolled back.
+4. **Stacks for atomic operations.** When a service spans multiple devices, a stack groups them. Either all succeed or all roll back.
 
 ## Quick Start
 
 ```bash
-# Clone the repo
 git clone https://github.com/netstacks/netstacks-ci.git
 cd netstacks-ci
 
-# Set up Python environment
 python3 -m venv .venv && source .venv/bin/activate
 pip install jinja2 pyyaml pygnmi ncclient deepdiff
 
-# Add a device to inventory.yaml
-# Pull its config
-./nsci pull pe1-nyc
-
-# Edit the config
-# Push it back
-./nsci push pe1-nyc
+./nsci pull pe1-nyc          # Pull device config
+vim configs/pe1-nyc.json     # Edit it
+./nsci push pe1-nyc          # Push it back
 ```
 
 See [[Getting Started]] for a complete walkthrough.
+
+---
 
 ## Wiki Contents
 
