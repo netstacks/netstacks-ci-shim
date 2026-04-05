@@ -1,0 +1,69 @@
+# EASY BUTTON: Rollback a device to its pre-deploy snapshot.
+#
+# Triggered manually from GitHub Actions UI:
+#   Actions → Rollback Device → Run workflow → type device name → click Run
+#
+# What it does:
+#   1. Copies snapshots/<device>.json → configs/<device>.json
+#   2. Pushes the snapshot config to the device
+#   3. Commits the change to main
+#
+# The snapshot was saved automatically before the last deploy.
+
+name: Rollback Device
+
+on:
+  workflow_dispatch:
+    inputs:
+      device:
+        description: "Device name to rollback (e.g. pe1-nyc)"
+        required: true
+        type: string
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    runs-on: [self-hosted, network]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check snapshot exists
+        run: |
+          if [ ! -f "snapshots/${{ inputs.device }}.json" ]; then
+            echo "ERROR: No snapshot found for ${{ inputs.device }}"
+            echo "Available snapshots:"
+            ls snapshots/*.json 2>/dev/null | sed 's|snapshots/||;s|\.json||' || echo "  (none)"
+            exit 1
+          fi
+          echo "Snapshot found for ${{ inputs.device }}"
+
+      - name: Rollback
+        run: |
+          device="${{ inputs.device }}"
+
+          echo "=== Rolling back $device ==="
+          echo ""
+
+          # Copy snapshot over current config
+          cp "snapshots/${device}.json" "configs/${device}.json"
+          echo "Restored configs/${device}.json from snapshot"
+
+          # Push to device
+          echo ""
+          python3 nsci push "$device"
+
+          # Validate
+          echo ""
+          python3 nsci validate "$device"
+
+      - name: Commit rollback to main
+        run: |
+          device="${{ inputs.device }}"
+          git config user.name "nsci"
+          git config user.email "nsci@netstacks.io"
+          git add "configs/${device}.json"
+          git commit -m "Rollback ${device} to pre-deploy snapshot"
+          git push

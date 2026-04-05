@@ -1,7 +1,6 @@
 # Runs automatically when configs/ changes on main.
-# Checks if the changed devices belong to a service deployment.
-# If yes: uses the service's atomic/parallel settings.
-# If no: deploys independently (no rollback between devices).
+# Saves a snapshot of each device BEFORE deploying (for rollback).
+# Then deploys the new config.
 
 name: Deploy to Devices
 
@@ -23,28 +22,44 @@ jobs:
         with:
           fetch-depth: 2
 
-      - name: Detect and deploy
+      - name: Detect changed devices
+        id: detect
         run: |
-          # Find which devices changed
           changed=$(git diff --name-only HEAD~1 HEAD -- configs/ \
             | sed 's|configs/||;s|\.json||' \
             | sort -u)
+          echo "devices=$changed"
+          echo "devices=$changed" >> $GITHUB_OUTPUT
 
-          echo "Changed devices: $changed"
+      - name: Snapshot before deploy
+        run: |
+          mkdir -p snapshots
+          for device in ${{ steps.detect.outputs.devices }}; do
+            echo "Snapshotting $device..."
+            python3 nsci pull-snapshot "$device" || echo "  (snapshot failed, continuing)"
+          done
+
+          # Commit snapshots so rollback workflow can access them
+          git config user.name "nsci"
+          git config user.email "nsci@netstacks.io"
+          git add snapshots/
+          git diff --cached --quiet || git commit -m "ci: pre-deploy snapshots"
+          git push || true
+
+      - name: Deploy
+        run: |
+          changed="${{ steps.detect.outputs.devices }}"
 
           # Check if any stack covers these devices
           deployed_devices=""
           for stack_dir in stacks/*/; do
             [ -f "${stack_dir}stack.yaml" ] || continue
-
             stack_name=$(basename "$stack_dir")
             stack_devices=$(python3 -c "
           import yaml
           s = yaml.safe_load(open('${stack_dir}stack.yaml'))
           print(' '.join(s.get('devices', [])))
           ")
-
-            # Check if any changed device is in this stack
             match=false
             for device in $changed; do
               if echo "$stack_devices" | grep -qw "$device"; then
@@ -52,7 +67,6 @@ jobs:
                 break
               fi
             done
-
             if [ "$match" = true ]; then
               echo ""
               echo "=== Stack: $stack_name ==="
@@ -61,7 +75,7 @@ jobs:
             fi
           done
 
-          # Deploy remaining devices that aren't part of any stack
+          # Deploy remaining devices independently
           for device in $changed; do
             if ! echo "$deployed_devices" | grep -qw "$device"; then
               echo ""

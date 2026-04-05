@@ -124,6 +124,25 @@ def cmd_pull(args):
     print(f"Sections: {', '.join(keys)}")
 
 
+SNAPSHOTS_DIR = REPO_ROOT / "snapshots"
+
+
+def cmd_pull_snapshot(args):
+    """Pull device config into snapshots/<device>.json (pre-deploy backup)."""
+    device_name = args.device
+    device = get_device(device_name)
+
+    print(f"Snapshotting {device_name} ({device['hostname']})...")
+    config = gnmi_pull(device)
+
+    SNAPSHOTS_DIR.mkdir(parents=True, exist_ok=True)
+    path = SNAPSHOTS_DIR / f"{device_name}.json"
+    with open(path, "w") as f:
+        json.dump(config, f, indent=2)
+        f.write("\n")
+    print(f"Saved: {path.relative_to(REPO_ROOT)}")
+
+
 def cmd_push(args):
     """Push configs/<device>.json to a single device."""
     device_name = args.device
@@ -719,6 +738,9 @@ def main():
     p = sub.add_parser("pull", help="Pull device config into configs/<device>.json")
     p.add_argument("device", help="Device name from inventory")
 
+    p = sub.add_parser("pull-snapshot", help="Save device config to snapshots/ (pre-deploy backup)")
+    p.add_argument("device", help="Device name from inventory")
+
     p = sub.add_parser("push", help="Push config file to a single device")
     p.add_argument("device", help="Device name from inventory")
 
@@ -764,6 +786,7 @@ def main():
 
     cmds = {
         "pull": cmd_pull,
+        "pull-snapshot": cmd_pull_snapshot,
         "push": cmd_push,
         "deploy": cmd_deploy,
         "stack-deploy": cmd_stack_deploy,
