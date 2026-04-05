@@ -32,11 +32,11 @@ git clone https://github.com/netstacks/netstacks-ci.git
 cd netstacks-ci
 
 python3 -m venv .venv && source .venv/bin/activate
-pip install jinja2 pyyaml pygnmi ncclient deepdiff
+pip install -r requirements.txt
 
-./nsci pull pe1-nyc          # Pull device config
-vim configs/pe1-nyc.json     # Edit it
-./nsci push pe1-nyc          # Push it back
+./nsci pull pe1-nyc                     # Pull device config
+vim configs/pe1-nyc.json                # Edit it
+./nsci push pe1-nyc --full-replace      # Push it back
 ```
 
 See [[Getting Started]] for a complete walkthrough.
@@ -75,7 +75,10 @@ See [[Getting Started]] for a complete walkthrough.
 - [[REST API Transport]] — How Palo Alto, F5, and API-driven devices work
 - [[Writing Drivers]] — Adding support for new device types
 
-### Reference
+### API
+- [[API Reference]] — REST API endpoints and examples
 - [[Command Reference]] — Complete list of all `nsci` commands
+
+### Reference
 - [[Repository Structure]] — Directory layout and file purposes
 - [[FAQ]] — Common questions and troubleshooting

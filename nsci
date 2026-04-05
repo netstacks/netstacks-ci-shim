@@ -12,7 +12,10 @@ https://github.com/netstacks/netstacks-ci
 
 import argparse
 import concurrent.futures
+import contextlib
+import io
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -2202,6 +2205,293 @@ def cmd_library(args):
 
 
 # ---------------------------------------------------------------------------
+# API server
+# ---------------------------------------------------------------------------
+
+def _run_cmd(cmd_fn, fake_args):
+    """Run a cmd_* function, capture its stdout, catch SystemExit."""
+    ns = argparse.Namespace(**fake_args)
+    buf = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(buf):
+            exit_code = cmd_fn(ns) or 0
+    except SystemExit as e:
+        exit_code = e.code if isinstance(e.code, int) else 1
+    except Exception as e:
+        buf.write(f"ERROR: {e}\n")
+        exit_code = 1
+    return {"ok": exit_code == 0, "exit_code": exit_code, "output": buf.getvalue()}
+
+
+def _make_api_app():
+    """Create Flask app with all API routes."""
+    from flask import Flask, jsonify, request
+
+    app = Flask("nsci")
+
+    # --- Auth middleware ---
+    api_token = os.environ.get("NSCI_API_TOKEN")
+
+    @app.before_request
+    def check_auth():
+        if not api_token:
+            return  # no token configured — open access
+        auth = request.headers.get("Authorization", "")
+        if auth != f"Bearer {api_token}":
+            return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    # --- Device endpoints ---
+
+    @app.get("/api/v1/status")
+    def api_status():
+        return jsonify(_run_cmd(cmd_status, {}))
+
+    @app.get("/api/v1/devices/<device>")
+    def api_show(device):
+        section = request.args.get("section")
+        return jsonify(_run_cmd(cmd_show, {"device": device, "section": section}))
+
+    @app.post("/api/v1/devices/<device>/pull")
+    def api_pull(device):
+        return jsonify(_run_cmd(cmd_pull, {"device": device}))
+
+    @app.post("/api/v1/devices/<device>/push")
+    def api_push(device):
+        body = request.get_json(silent=True) or {}
+        return jsonify(_run_cmd(cmd_push, {
+            "devices": [device],
+            "full_replace": body.get("full_replace", False),
+            "workers": body.get("workers", 10),
+            "no_atomic": body.get("no_atomic", False),
+        }))
+
+    @app.get("/api/v1/devices/<device>/diff")
+    def api_diff(device):
+        return jsonify(_run_cmd(cmd_diff, {"device": device}))
+
+    @app.get("/api/v1/devices/<device>/validate")
+    def api_validate(device):
+        return jsonify(_run_cmd(cmd_validate, {"device": device}))
+
+    @app.get("/api/v1/devices/<device>/history")
+    def api_history(device):
+        count = request.args.get("count", 10, type=int)
+        diff = request.args.get("diff", None, type=int)
+        return jsonify(_run_cmd(cmd_history, {"device": device, "count": count, "diff": diff}))
+
+    @app.post("/api/v1/devices/<device>/rollback")
+    def api_rollback(device):
+        body = request.get_json(silent=True) or {}
+        version = body.get("version")
+        if version is None:
+            return jsonify({"ok": False, "error": "version required"}), 400
+        return jsonify(_run_cmd(cmd_rollback, {
+            "device": device,
+            "version": int(version),
+            "no_push": body.get("no_push", False),
+        }))
+
+    # --- Library endpoints ---
+
+    @app.get("/api/v1/library")
+    def api_library_list():
+        return jsonify(_run_cmd(cmd_library, {"service": None}))
+
+    @app.get("/api/v1/library/<service>")
+    def api_library_detail(service):
+        return jsonify(_run_cmd(cmd_library, {"service": service}))
+
+    # --- Stack endpoints ---
+
+    @app.get("/api/v1/stacks")
+    def api_stack_list():
+        return jsonify(_run_cmd(cmd_stack_list, {}))
+
+    @app.get("/api/v1/stacks/<stack>/render")
+    def api_stack_render(stack):
+        delete = request.args.get("delete", "false").lower() == "true"
+        return jsonify(_run_cmd(cmd_stack_render, {"stack": stack, "delete": delete}))
+
+    @app.post("/api/v1/stacks/<stack>/deploy")
+    def api_stack_deploy(stack):
+        return jsonify(_run_cmd(cmd_stack_deploy, {"stack": stack}))
+
+    @app.post("/api/v1/stacks/<stack>/delete")
+    def api_stack_delete(stack):
+        return jsonify(_run_cmd(cmd_stack_delete, {"stack": stack}))
+
+    # --- Health ---
+
+    @app.get("/api/v1/health")
+    def api_health():
+        return jsonify({"ok": True, "mode": "api", "version": "nsci"})
+
+    # --- OpenAPI spec ---
+
+    OPENAPI_SPEC = {
+        "openapi": "3.0.3",
+        "info": {
+            "title": "nsci API",
+            "description": "NetStacks CI — Git-native network config management API",
+            "version": "1.0.0",
+        },
+        "paths": {
+            "/api/v1/health": {
+                "get": {"summary": "Health check", "tags": ["health"], "responses": {"200": {"description": "Server is running"}}}
+            },
+            "/api/v1/status": {
+                "get": {"summary": "List all devices and config state", "tags": ["devices"], "responses": {"200": {"description": "Device status list"}}}
+            },
+            "/api/v1/devices/{device}": {
+                "get": {
+                    "summary": "Show device config",
+                    "tags": ["devices"],
+                    "parameters": [
+                        {"name": "device", "in": "path", "required": True, "schema": {"type": "string"}},
+                        {"name": "section", "in": "query", "required": False, "schema": {"type": "string"}, "description": "Config section path (e.g. system/ntp)"},
+                    ],
+                    "responses": {"200": {"description": "Device config"}},
+                }
+            },
+            "/api/v1/devices/{device}/pull": {
+                "post": {
+                    "summary": "Pull running config from device into configs/",
+                    "tags": ["devices"],
+                    "parameters": [{"name": "device", "in": "path", "required": True, "schema": {"type": "string"}}],
+                    "responses": {"200": {"description": "Pull result"}},
+                }
+            },
+            "/api/v1/devices/{device}/push": {
+                "post": {
+                    "summary": "Push config file to device (full replace)",
+                    "tags": ["devices"],
+                    "parameters": [{"name": "device", "in": "path", "required": True, "schema": {"type": "string"}}],
+                    "requestBody": {
+                        "content": {"application/json": {"schema": {"type": "object", "properties": {
+                            "full_replace": {"type": "boolean", "description": "Required — confirms full config replace"},
+                        }, "required": ["full_replace"]}}}
+                    },
+                    "responses": {"200": {"description": "Push result"}},
+                }
+            },
+            "/api/v1/devices/{device}/diff": {
+                "get": {
+                    "summary": "Compare config file vs live device",
+                    "tags": ["devices"],
+                    "parameters": [{"name": "device", "in": "path", "required": True, "schema": {"type": "string"}}],
+                    "responses": {"200": {"description": "Diff result"}},
+                }
+            },
+            "/api/v1/devices/{device}/validate": {
+                "get": {
+                    "summary": "Check if device matches config file",
+                    "tags": ["devices"],
+                    "parameters": [{"name": "device", "in": "path", "required": True, "schema": {"type": "string"}}],
+                    "responses": {"200": {"description": "Validation result"}},
+                }
+            },
+            "/api/v1/devices/{device}/history": {
+                "get": {
+                    "summary": "Show change history for a device",
+                    "tags": ["devices"],
+                    "parameters": [
+                        {"name": "device", "in": "path", "required": True, "schema": {"type": "string"}},
+                        {"name": "count", "in": "query", "required": False, "schema": {"type": "integer", "default": 10}},
+                        {"name": "diff", "in": "query", "required": False, "schema": {"type": "integer"}, "description": "Show diff for version N"},
+                    ],
+                    "responses": {"200": {"description": "History list"}},
+                }
+            },
+            "/api/v1/devices/{device}/rollback": {
+                "post": {
+                    "summary": "Rollback device to a previous config version",
+                    "tags": ["devices"],
+                    "parameters": [{"name": "device", "in": "path", "required": True, "schema": {"type": "string"}}],
+                    "requestBody": {
+                        "content": {"application/json": {"schema": {"type": "object", "properties": {
+                            "version": {"type": "integer", "description": "Version number from history"},
+                            "no_push": {"type": "boolean", "description": "Only restore file, don't push to device"},
+                        }, "required": ["version"]}}}
+                    },
+                    "responses": {"200": {"description": "Rollback result"}},
+                }
+            },
+            "/api/v1/stacks": {
+                "get": {"summary": "List all stacks", "tags": ["stacks"], "responses": {"200": {"description": "Stack list"}}}
+            },
+            "/api/v1/stacks/{stack}/render": {
+                "get": {
+                    "summary": "Render stack templates (dry run)",
+                    "tags": ["stacks"],
+                    "parameters": [
+                        {"name": "stack", "in": "path", "required": True, "schema": {"type": "string"}},
+                        {"name": "delete", "in": "query", "required": False, "schema": {"type": "boolean"}, "description": "Show delete payloads"},
+                    ],
+                    "responses": {"200": {"description": "Rendered output"}},
+                }
+            },
+            "/api/v1/stacks/{stack}/deploy": {
+                "post": {
+                    "summary": "Deploy a stack to devices",
+                    "tags": ["stacks"],
+                    "parameters": [{"name": "stack", "in": "path", "required": True, "schema": {"type": "string"}}],
+                    "responses": {"200": {"description": "Deploy result"}},
+                }
+            },
+            "/api/v1/stacks/{stack}/delete": {
+                "post": {
+                    "summary": "Remove all config deployed by a stack",
+                    "tags": ["stacks"],
+                    "parameters": [{"name": "stack", "in": "path", "required": True, "schema": {"type": "string"}}],
+                    "responses": {"200": {"description": "Delete result"}},
+                }
+            },
+            "/api/v1/library": {
+                "get": {"summary": "List all service templates", "tags": ["library"], "responses": {"200": {"description": "Template list"}}}
+            },
+            "/api/v1/library/{service}": {
+                "get": {
+                    "summary": "Show template details",
+                    "tags": ["library"],
+                    "parameters": [{"name": "service", "in": "path", "required": True, "schema": {"type": "string"}}],
+                    "responses": {"200": {"description": "Template details"}},
+                }
+            },
+        },
+    }
+
+    @app.get("/api/v1/openapi.json")
+    def api_openapi():
+        return jsonify(OPENAPI_SPEC)
+
+    return app
+
+
+def cmd_serve(args):
+    """Start nsci as an API server."""
+    try:
+        from flask import Flask  # noqa: F401
+    except ImportError:
+        print("Flask is required for API mode:")
+        print("  pip install flask")
+        return 1
+
+    app = _make_api_app()
+    host = args.host
+    port = args.port
+
+    print(f"nsci API server starting on {host}:{port}")
+    if os.environ.get("NSCI_API_TOKEN"):
+        print(f"Auth: Bearer token required (NSCI_API_TOKEN is set)")
+    else:
+        print(f"Auth: NONE (set NSCI_API_TOKEN to require auth)")
+    print(f"Endpoints: /api/v1/...")
+    print()
+
+    app.run(host=host, port=port, debug=args.debug)
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -2271,6 +2561,12 @@ def main():
     p = sub.add_parser("library", help="Browse service templates")
     p.add_argument("service", nargs="?", help="Service name for details").completer = _complete_services
 
+    # --- API server ---
+    p = sub.add_parser("serve", help="Start nsci as an API server")
+    p.add_argument("--host", default="0.0.0.0", help="Bind address (default: 0.0.0.0)")
+    p.add_argument("--port", type=int, default=8080, help="Port (default: 8080)")
+    p.add_argument("--debug", action="store_true", help="Enable Flask debug mode")
+
     # Tab completion (requires: pip install argcomplete)
     try:
         import argcomplete
@@ -2298,6 +2594,7 @@ def main():
         "rollback": cmd_rollback,
         "status": cmd_status,
         "library": cmd_library,
+        "serve": cmd_serve,
     }
     sys.exit(cmds[args.command](args) or 0)
 

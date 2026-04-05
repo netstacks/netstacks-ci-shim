@@ -465,3 +465,43 @@ Platforms: eos, ios, iosxr
 
   ntp_servers (list, required): NTP servers to configure
 ```
+
+---
+
+## API Server
+
+### `nsci serve [--host HOST] [--port PORT] [--debug]`
+
+Start nsci as a REST API server.
+
+```bash
+# Default: 0.0.0.0:8080
+nsci serve
+
+# Custom port
+nsci serve --port 9090
+
+# With authentication
+NSCI_API_TOKEN=mysecret nsci serve
+```
+
+**Options:**
+
+| Flag | Default | Description |
+|---|---|---|
+| `--host` | 0.0.0.0 | Bind address |
+| `--port` | 8080 | Listen port |
+| `--debug` | false | Enable Flask debug mode |
+
+**Authentication:** Set `NSCI_API_TOKEN` environment variable. All requests must include `Authorization: Bearer <token>`. If not set, the API runs without auth.
+
+**Requires:** `pip install flask`
+
+**Output:**
+```
+nsci API server starting on 0.0.0.0:8080
+Auth: Bearer token required (NSCI_API_TOKEN is set)
+Endpoints: /api/v1/...
+```
+
+See [[API Reference]] for the full endpoint list.

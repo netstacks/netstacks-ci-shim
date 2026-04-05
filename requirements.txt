@@ -1,0 +1,13 @@
+# Core — required for all CLI operations
+jinja2>=3.1
+markupsafe>=2.1
+pyyaml>=6.0
+
+# Transport — install what you need
+pygnmi>=0.8            # gNMI (Arista EOS, Cisco IOS-XR, Nokia SR OS, etc.)
+ncclient>=0.6          # NETCONF (Juniper Junos, Cisco IOS-XR, etc.)
+
+# Optional — enhanced features
+deepdiff>=6.0          # Detailed JSON diffs (nsci diff)
+argcomplete>=3.0       # Tab completion (nsci pull <TAB>)
+flask>=3.0             # API server mode (nsci serve)

@@ -32,16 +32,19 @@ source .venv/bin/activate
 ### 3. Install Dependencies
 
 ```bash
-pip install jinja2 pyyaml pygnmi ncclient deepdiff
+pip install -r requirements.txt
 ```
 
-| Package | Purpose |
-|---|---|
-| `jinja2` | Template rendering for the service library |
-| `pyyaml` | Reading YAML config files (inventory, stacks, schemas) |
-| `pygnmi` | gNMI transport for Arista EOS and other gNMI devices |
-| `ncclient` | NETCONF transport for IOS-XR, Junos, and other NETCONF devices |
-| `deepdiff` | Detailed JSON comparison for the `diff` command |
+| Package | Required | Purpose |
+|---|---|---|
+| `jinja2` | yes | Template rendering for the service library |
+| `markupsafe` | yes | XML escaping for templates |
+| `pyyaml` | yes | Reading YAML config files (inventory, stacks, schemas) |
+| `pygnmi` | for gNMI | gNMI transport for Arista EOS and other gNMI devices |
+| `ncclient` | for NETCONF | NETCONF transport for IOS-XR, Junos, and other NETCONF devices |
+| `deepdiff` | optional | Detailed JSON comparison for the `diff` command |
+| `argcomplete` | optional | Tab completion for commands and device names |
+| `flask` | optional | API server mode (`nsci serve`) |
 
 ### 4. Verify Installation
 
@@ -182,18 +185,18 @@ This pulls the live config from the device and compares it to your file. It show
 ## Push the Change
 
 ```bash
-./nsci push my-switch
+./nsci push my-switch --full-replace
 ```
 
 Output:
 
 ```
 Pushing config to my-switch (10.0.0.1)...
-gNMI Set: REPLACE
-Device config replaced from configs/my-switch.json
+  my-switch: gNMI Set REPLACE
+  my-switch: synced
 ```
 
-The device now matches your file. The gNMI `replace` operation handled adding the NTP server — you didn't generate any CLI commands.
+The `--full-replace` flag is required — it confirms you intend to replace the device's entire running config. The device now matches your file. The gNMI `replace` operation handled adding the NTP server — you didn't generate any CLI commands.
 
 ## Validate
 
@@ -218,9 +221,26 @@ git push
 
 The change is now tracked in Git with full history. Anyone can see who made the change, when, and why.
 
+## Tab Completion
+
+Enable tab completion for device names, stack names, and commands:
+
+```bash
+# One-time setup (add to ~/.bashrc or ~/.zshrc)
+eval "$(register-python-argcomplete nsci)"
+```
+
+Now you can tab-complete:
+- `nsci pull <TAB>` — shows device names
+- `nsci stack-deploy <TAB>` — shows stack names
+- `nsci <TAB>` — shows all commands
+
+Use `?` for context-sensitive help (like Cisco IOS): `nsci ?`, `nsci push ?`
+
 ## What's Next
 
 - [[Managing Device Configs]] — Pull, edit, push, validate in detail
 - [[Stacks and Atomic Deploys]] — Group devices for service deployments
+- [[API Reference]] — Run nsci as a REST API server
 - [[GitHub Actions Setup]] — Automate preview and deploy on PR merge
 - [[History and Rollback]] — View change history and revert changes
