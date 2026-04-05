@@ -1,0 +1,15 @@
+services:
+  nsci:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "${NSCI_PORT:-8080}:8080"
+    volumes:
+      - nsci-configs:/app/configs
+      - nsci-snapshots:/app/snapshots
+    environment:
+      - NSCI_API_TOKEN=${NSCI_API_TOKEN}
+
+volumes:
+  nsci-configs:
+  nsci-snapshots:

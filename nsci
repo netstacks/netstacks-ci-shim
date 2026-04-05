@@ -64,16 +64,27 @@ def _complete_services(**kwargs):
 # ---------------------------------------------------------------------------
 
 def load_inventory():
+    inv = {}
     with open(INVENTORY_FILE) as f:
-        return yaml.safe_load(f).get("devices", {})
+        inv = yaml.safe_load(f).get("devices", {})
+    # Merge in any inline devices (from /api/v1/operations/* endpoints)
+    inv.update(_INLINE_DEVICES)
+    return inv
 
 
 def get_device(name):
+    # Check inline overlay first
+    if name in _INLINE_DEVICES:
+        return _INLINE_DEVICES[name]
     inv = load_inventory()
     if name not in inv:
         print(f"Error: device '{name}' not in inventory")
         sys.exit(1)
     return inv[name]
+
+
+# Inline device overlay — populated by _op_deploy_stack/_op_delete_stack
+_INLINE_DEVICES = {}
 
 
 TRANSPORT_FORMAT = {
@@ -93,9 +104,14 @@ def load_driver(driver_name):
         return yaml.safe_load(f)
 
 
-def get_transport(device_name):
-    """Get the transport type for a device."""
-    device = get_device(device_name)
+def get_transport(device_or_name):
+    """Get the transport type for a device.
+    Accepts device name (str) or inline device dict.
+    """
+    if isinstance(device_or_name, str):
+        device = get_device(device_or_name)
+    else:
+        device = device_or_name
     driver = load_driver(device["driver"])
     if not driver:
         return None
@@ -392,14 +408,33 @@ def netconf_confirm(device):
 # Transport-agnostic operations
 # ---------------------------------------------------------------------------
 
-def transport_pull(device_name):
+def _resolve_device(device_or_name):
+    """Resolve a device reference to (device_dict, driver_dict).
+
+    Accepts either:
+      - str: device name looked up from inventory.yaml
+      - dict: inline device dict with {name, hostname, driver, credential}
+    """
+    if isinstance(device_or_name, str):
+        device = get_device(device_or_name)
+        driver = load_driver(device["driver"])
+        return device, driver
+    elif isinstance(device_or_name, dict):
+        device = device_or_name
+        driver = load_driver(device["driver"])
+        return device, driver
+    else:
+        raise ValueError(f"expected device name (str) or device dict, got {type(device_or_name)}")
+
+
+def transport_pull(device_or_name):
     """Pull full config from device using its driver's transport.
     Returns (config, format) where format is 'json' or 'xml'.
+    Accepts device name (str) or inline device dict.
     """
-    device = get_device(device_name)
-    driver = load_driver(device["driver"])
+    device, driver = _resolve_device(device_or_name)
     if not driver:
-        raise ValueError(f"no driver for {device_name}")
+        raise ValueError(f"no driver for device")
     transport = driver["transport"]
 
     if transport == "gnmi":
@@ -410,10 +445,11 @@ def transport_pull(device_name):
         raise ValueError(f"pull not supported for transport '{transport}'")
 
 
-def transport_push_full(device_name, config):
-    """Push full config to device (replace). Config is dict for gNMI, str for NETCONF."""
-    device = get_device(device_name)
-    driver = load_driver(device["driver"])
+def transport_push_full(device_or_name, config):
+    """Push full config to device (replace). Config is dict for gNMI, str for NETCONF.
+    Accepts device name (str) or inline device dict.
+    """
+    device, driver = _resolve_device(device_or_name)
     transport = driver["transport"]
 
     if transport == "gnmi":
@@ -474,7 +510,7 @@ def _gnmi_delete_paths(config, base_path):
     return paths if paths else [base_path]
 
 
-def transport_push_partial(device_name, rendered_output, template_path, target_path=None, operation="merge"):
+def transport_push_partial(device_or_name, rendered_output, template_path, target_path=None, operation="merge"):
     """Push rendered template to device via the right transport.
 
     The operation comes from the service schema (template creator's decision):
@@ -482,10 +518,10 @@ def transport_push_partial(device_name, rendered_output, template_path, target_p
       replace: gNMI Set replace / NETCONF nc:operation="replace" (set in template XML)
       delete:  gNMI Set delete per list item / NETCONF nc:operation="delete" (template XML)
 
+    Accepts device name (str) or inline device dict.
     Returns dict with push metadata including whether confirmed_commit is pending.
     """
-    device = get_device(device_name)
-    driver = load_driver(device["driver"])
+    device, driver = _resolve_device(device_or_name)
     transport = driver["transport"]
 
     if transport == "gnmi":
@@ -516,10 +552,11 @@ def transport_push_partial(device_name, rendered_output, template_path, target_p
         raise ValueError(f"partial push not supported for transport '{transport}'")
 
 
-def transport_confirm(device_name):
-    """Send confirming commit for devices with pending confirmed-commits."""
-    device = get_device(device_name)
-    driver = load_driver(device["driver"])
+def transport_confirm(device_or_name):
+    """Send confirming commit for devices with pending confirmed-commits.
+    Accepts device name (str) or inline device dict.
+    """
+    device, driver = _resolve_device(device_or_name)
     transport = driver["transport"]
 
     if transport == "netconf":
@@ -2223,8 +2260,537 @@ def _run_cmd(cmd_fn, fake_args):
     return {"ok": exit_code == 0, "exit_code": exit_code, "output": buf.getvalue()}
 
 
+# ---------------------------------------------------------------------------
+# Structured response builders (for Accept: application/json)
+# ---------------------------------------------------------------------------
+
+def _structured_status():
+    """Return structured device status."""
+    inventory = load_inventory()
+    devices = []
+    for name, device in inventory.items():
+        json_path = config_path(name)
+        xml_path = CONFIGS_DIR / f"{name}.xml"
+        if json_path.exists():
+            config_state = f"{json_path.stat().st_size // 1024}KB"
+        elif xml_path.exists():
+            config_state = f"{xml_path.stat().st_size // 1024}KB (xml)"
+        else:
+            config_state = "not pulled"
+        devices.append({
+            "name": name,
+            "hostname": device.get("hostname", ""),
+            "driver": device.get("driver", ""),
+            "site": device.get("site", ""),
+            "role": device.get("role", ""),
+            "config_state": config_state,
+        })
+    return {"ok": True, "devices": devices}
+
+
+def _structured_pull(device_or_name):
+    """Pull device config and return structured response."""
+    device, driver = _resolve_device(device_or_name)
+    device_name = device.get("name", device_or_name if isinstance(device_or_name, str) else "unknown")
+    transport = driver["transport"] if driver else "gnmi"
+
+    config, fmt = transport_pull(device)
+
+    if fmt == "json":
+        path = save_config(device_name, config)
+        return {
+            "ok": True,
+            "device": device_name,
+            "config": config,
+            "format": fmt,
+        }
+    else:
+        CONFIGS_DIR.mkdir(parents=True, exist_ok=True)
+        path = CONFIGS_DIR / f"{device_name}.xml"
+        with open(path, "w") as f:
+            f.write(config)
+        return {
+            "ok": True,
+            "device": device_name,
+            "config": config,
+            "format": fmt,
+        }
+
+
+def _structured_push(device_or_name, full_replace=True):
+    """Push config file to device and return structured response."""
+    device, driver = _resolve_device(device_or_name)
+    device_name = device.get("name", device_or_name if isinstance(device_or_name, str) else "unknown")
+    transport = driver["transport"] if driver else "gnmi"
+
+    if transport == "gnmi":
+        config = load_config(device_name)
+        gnmi_push(device, config)
+    elif transport == "netconf":
+        xml_path = CONFIGS_DIR / f"{device_name}.xml"
+        if not xml_path.exists():
+            return {"ok": False, "device": device_name, "success": False, "changed": False,
+                    "error": f"no config file configs/{device_name}.xml"}
+        with open(xml_path) as f:
+            netconf_push(device, f.read())
+    else:
+        return {"ok": False, "device": device_name, "success": False, "changed": False,
+                "error": f"transport '{transport}' not supported"}
+
+    return {"ok": True, "device": device_name, "success": True, "changed": True}
+
+
+def _structured_diff(device_name):
+    """Compare local config vs live device and return structured response."""
+    device = get_device(device_name)
+    local_config = load_config(device_name)
+    live_config, fmt = transport_pull(device_name)
+
+    if fmt != "json":
+        return {"ok": False, "device": device_name, "error": "diff only supported for gNMI (JSON) devices"}
+
+    try:
+        from deepdiff import DeepDiff
+        diff = DeepDiff(live_config, local_config, ignore_order=True)
+    except ImportError:
+        if json.dumps(live_config, sort_keys=True) == json.dumps(local_config, sort_keys=True):
+            diff = {}
+        else:
+            diff = {"note": "install deepdiff for detailed diff"}
+
+    in_sync = not diff
+    sections = []
+    if not in_sync:
+        d = diff.to_dict() if hasattr(diff, 'to_dict') else diff
+        for change_type, changes in d.items():
+            section = {"type": change_type, "changes": []}
+            if isinstance(changes, dict):
+                for path, detail in list(changes.items())[:50]:
+                    section["changes"].append({"path": path, "detail": str(detail)})
+            elif isinstance(changes, list):
+                for item in changes[:50]:
+                    section["changes"].append({"path": str(item)})
+            else:
+                section["changes"].append({"detail": str(changes)})
+            sections.append(section)
+
+    return {"ok": True, "device": device_name, "in_sync": in_sync, "sections": sections}
+
+
+def _structured_validate(device_name):
+    """Validate device matches config file and return structured response."""
+    device = get_device(device_name)
+    local_config = load_config(device_name)
+    live_config, fmt = transport_pull(device_name)
+
+    if fmt != "json":
+        return {"ok": False, "device": device_name, "error": "validation only supported for gNMI (JSON) devices"}
+
+    local_str = json.dumps(local_config, sort_keys=True)
+    live_str = json.dumps(live_config, sort_keys=True)
+    in_sync = local_str == live_str
+
+    return {"ok": True, "device": device_name, "in_sync": in_sync}
+
+
+def _structured_history(device_name, count=10):
+    """Return structured device history."""
+    path = f"configs/{device_name}.json"
+    output, rc = _git(["log", f"-{count}", "--pretty=format:%H  %h  %ar  %s", "--", path])
+    if rc != 0 or not output:
+        return {"ok": True, "device": device_name, "commits": []}
+
+    commits = []
+    for i, line in enumerate(output.strip().split("\n")):
+        parts = line.split("  ", 3)
+        if len(parts) >= 4:
+            commits.append({
+                "hash": parts[0],
+                "short_hash": parts[1],
+                "date": parts[2],
+                "message": parts[3],
+                "version": i,
+            })
+    return {"ok": True, "device": device_name, "commits": commits}
+
+
+def _structured_rollback(device_name, version, no_push=False):
+    """Rollback device to version and return structured response."""
+    path = f"configs/{device_name}.json"
+    output, rc = _git(["log", "--pretty=format:%H  %ar  %s", "--", path])
+    if rc != 0 or not output:
+        return {"ok": False, "device": device_name, "error": f"no history for {device_name}"}
+
+    commits = output.strip().split("\n")
+    if version >= len(commits):
+        return {"ok": False, "device": device_name,
+                "error": f"only {len(commits)} versions available (0-{len(commits)-1})"}
+    if version == 0:
+        return {"ok": True, "device": device_name, "success": True,
+                "rolled_back_to": 0, "message": "version 0 is already current"}
+
+    target_hash = commits[version].split()[0]
+
+    file_content, rc = _git(["show", f"{target_hash}:{path}"])
+    if rc != 0:
+        return {"ok": False, "device": device_name,
+                "error": f"could not read {path} from commit {target_hash}"}
+
+    config_path(device_name).write_text(file_content)
+    _git(["add", path])
+    msg = f"Rollback {device_name} to version {version} ({target_hash[:7]})"
+    _git(["commit", "-m", msg])
+
+    if not no_push:
+        config = json.loads(file_content)
+        try:
+            transport_push_full(device_name, config)
+        except Exception as e:
+            return {"ok": False, "device": device_name, "success": False,
+                    "rolled_back_to": version,
+                    "error": f"file rolled back but push failed: {e}"}
+
+        try:
+            config_back, fmt = transport_pull(device_name)
+            if fmt == "json":
+                save_config(device_name, config_back)
+        except Exception:
+            pass  # sync failure is non-fatal
+
+    return {"ok": True, "device": device_name, "success": True, "rolled_back_to": version}
+
+
+def _structured_library_list():
+    """Return structured library listing."""
+    if not LIBRARY_DIR.exists():
+        return {"ok": True, "services": []}
+
+    services = []
+    for d in sorted(LIBRARY_DIR.iterdir()):
+        if not d.is_dir():
+            continue
+        schema_path = d / "schema.yaml"
+        if schema_path.exists():
+            schema = yaml.safe_load(open(schema_path))
+        else:
+            schema = {}
+        variables = {}
+        for var_name, var_def in schema.get("variables", {}).items():
+            if isinstance(var_def, dict):
+                variables[var_name] = {
+                    "type": var_def.get("type", "string"),
+                    "required": var_def.get("required", False),
+                    "scope": var_def.get("scope", "shared"),
+                    "description": var_def.get("description", ""),
+                }
+        services.append({
+            "name": schema.get("name", d.name),
+            "description": schema.get("description", ""),
+            "path": schema.get("path", ""),
+            "operation": schema.get("operation", "merge"),
+            "templates": list(schema.get("templates", {}).keys()),
+            "variables": variables,
+        })
+    return {"ok": True, "services": services}
+
+
+def _structured_library_detail(service_name):
+    """Return structured service detail."""
+    service_dir = LIBRARY_DIR / service_name
+    if not service_dir.exists():
+        return {"ok": False, "error": f"service '{service_name}' not found"}
+
+    schema_path = service_dir / "schema.yaml"
+    schema = yaml.safe_load(open(schema_path)) if schema_path.exists() else {}
+
+    templates = {}
+    for fmt, filename in schema.get("templates", {}).items():
+        tmpl_path = service_dir / filename
+        if tmpl_path.exists():
+            templates[fmt] = {
+                "filename": filename,
+                "content": tmpl_path.read_text(),
+            }
+
+    variables = {}
+    for var_name, var_def in schema.get("variables", {}).items():
+        if isinstance(var_def, dict):
+            variables[var_name] = var_def
+
+    return {
+        "ok": True,
+        "name": schema.get("name", service_name),
+        "description": schema.get("description", ""),
+        "path": schema.get("path", ""),
+        "operation": schema.get("operation", "merge"),
+        "schema": variables,
+        "templates": templates,
+    }
+
+
+def _structured_stack_list():
+    """Return structured stack listing."""
+    if not STACKS_DIR.exists():
+        return {"ok": True, "stacks": []}
+
+    stacks = []
+    for d in sorted(STACKS_DIR.iterdir()):
+        stack_file = d / "stack.yaml"
+        if not stack_file.exists():
+            continue
+        stack = yaml.safe_load(open(stack_file))
+        services = []
+        all_devices = set()
+        for svc_entry in stack.get("services", []):
+            svc_name = svc_entry["service"]
+            devices_spec = svc_entry.get("devices", [])
+            if isinstance(devices_spec, list):
+                devs = devices_spec
+            elif isinstance(devices_spec, dict):
+                devs = list(devices_spec.keys())
+            else:
+                devs = []
+            all_devices.update(devs)
+            services.append(svc_name)
+        stacks.append({
+            "name": stack.get("name", d.name),
+            "description": stack.get("description", ""),
+            "atomic": stack.get("atomic", True),
+            "services": services,
+            "devices": sorted(all_devices),
+        })
+    return {"ok": True, "stacks": stacks}
+
+
+def _structured_stack_render(stack_name, delete=False):
+    """Render stack templates and return structured response."""
+    stack = _load_stack(stack_name)
+    if delete:
+        for svc_entry in stack.get("services", []):
+            svc_entry["operation"] = "delete"
+
+    jobs = _resolve_stack_services(stack)
+    _render_jobs(jobs)
+
+    rendered_jobs = []
+    for job in jobs:
+        entry = {
+            "service": job["service"],
+            "device": job["device"],
+            "driver": job.get("driver", ""),
+            "path": job.get("path", ""),
+            "operation": job.get("operation", "merge"),
+        }
+        if job["errors"]:
+            entry["errors"] = job["errors"]
+        else:
+            entry["config"] = job.get("rendered", "")
+            entry["format"] = job.get("fmt", "")
+        rendered_jobs.append(entry)
+
+    return {
+        "ok": not any(j["errors"] for j in jobs),
+        "stack": stack.get("name", stack_name),
+        "jobs": rendered_jobs,
+    }
+
+
+def _structured_stack_deploy(stack_name):
+    """Deploy a stack and return structured response.
+
+    Runs the full 6-stage pipeline: render → pre-flight → push → validate → confirm → sync.
+    """
+    # Use _run_cmd to capture CLI output and also return structured wrapper
+    result = _run_cmd(cmd_stack_deploy, {"stack": stack_name})
+    success = result["ok"]
+
+    # Parse basic info from the stack definition
+    stack = _load_stack(stack_name)
+    jobs = _resolve_stack_services(stack)
+    all_devices = list(dict.fromkeys(j["device"] for j in jobs))
+
+    return {
+        "ok": success,
+        "stack": stack.get("name", stack_name),
+        "success": success,
+        "results": [{"device": d, "success": success} for d in all_devices],
+        "output": result["output"],
+    }
+
+
+def _structured_stack_delete(stack_name):
+    """Delete a stack and return structured response."""
+    result = _run_cmd(cmd_stack_delete, {"stack": stack_name})
+    success = result["ok"]
+
+    stack = _load_stack(stack_name)
+    jobs = _resolve_stack_services(stack)
+    all_devices = list(dict.fromkeys(j["device"] for j in jobs))
+
+    return {
+        "ok": success,
+        "stack": stack.get("name", stack_name),
+        "success": success,
+        "results": [{"device": d, "success": success} for d in all_devices],
+        "output": result["output"],
+    }
+
+
+# ---------------------------------------------------------------------------
+# Inline device operations (no inventory.yaml needed)
+# ---------------------------------------------------------------------------
+
+def _op_pull(device_dict):
+    """Pull config from an inline device (not persisted to inventory)."""
+    device, driver = _resolve_device(device_dict)
+    device_name = device.get("name", "inline")
+    transport = driver["transport"] if driver else "gnmi"
+
+    config, fmt = transport_pull(device)
+    return {
+        "ok": True,
+        "device": device_name,
+        "config": config,
+        "format": fmt,
+    }
+
+
+def _op_push(device_dict, full_replace=True):
+    """Push config to an inline device from its local config file."""
+    device, driver = _resolve_device(device_dict)
+    device_name = device.get("name", "inline")
+    transport = driver["transport"] if driver else "gnmi"
+
+    if transport == "gnmi":
+        config = load_config(device_name)
+        gnmi_push(device, config)
+    elif transport == "netconf":
+        xml_path = CONFIGS_DIR / f"{device_name}.xml"
+        if not xml_path.exists():
+            return {"ok": False, "device": device_name, "success": False, "changed": False,
+                    "error": f"no config file configs/{device_name}.xml"}
+        with open(xml_path) as f:
+            netconf_push(device, f.read())
+    else:
+        return {"ok": False, "device": device_name, "success": False, "changed": False,
+                "error": f"transport '{transport}' not supported"}
+
+    return {"ok": True, "device": device_name, "success": True, "changed": True}
+
+
+def _op_diff(device_dict):
+    """Diff inline device against its local config file."""
+    device, driver = _resolve_device(device_dict)
+    device_name = device.get("name", "inline")
+
+    local_config = load_config(device_name)
+    live_config, fmt = transport_pull(device)
+
+    if fmt != "json":
+        return {"ok": False, "device": device_name, "error": "diff only supported for gNMI (JSON) devices"}
+
+    try:
+        from deepdiff import DeepDiff
+        diff = DeepDiff(live_config, local_config, ignore_order=True)
+    except ImportError:
+        if json.dumps(live_config, sort_keys=True) == json.dumps(local_config, sort_keys=True):
+            diff = {}
+        else:
+            diff = {"note": "install deepdiff for detailed diff"}
+
+    in_sync = not diff
+    sections = []
+    if not in_sync:
+        d = diff.to_dict() if hasattr(diff, 'to_dict') else diff
+        for change_type, changes in d.items():
+            section = {"type": change_type, "changes": []}
+            if isinstance(changes, dict):
+                for path, detail in list(changes.items())[:50]:
+                    section["changes"].append({"path": path, "detail": str(detail)})
+            elif isinstance(changes, list):
+                for item in changes[:50]:
+                    section["changes"].append({"path": str(item)})
+            else:
+                section["changes"].append({"detail": str(changes)})
+            sections.append(section)
+
+    return {"ok": True, "device": device_name, "in_sync": in_sync, "sections": sections}
+
+
+def _op_validate(device_dict):
+    """Validate inline device matches its local config file."""
+    device, driver = _resolve_device(device_dict)
+    device_name = device.get("name", "inline")
+
+    local_config = load_config(device_name)
+    live_config, fmt = transport_pull(device)
+
+    if fmt != "json":
+        return {"ok": False, "device": device_name, "error": "validation only supported for gNMI (JSON) devices"}
+
+    local_str = json.dumps(local_config, sort_keys=True)
+    live_str = json.dumps(live_config, sort_keys=True)
+    in_sync = local_str == live_str
+
+    return {"ok": True, "device": device_name, "in_sync": in_sync}
+
+
+def _op_deploy_stack(stack_name, device_dicts):
+    """Deploy a stack using inline device dicts instead of inventory.
+
+    Temporarily patches the inventory with the provided devices, then runs
+    the standard stack deploy pipeline.
+    """
+    # Inject inline devices into a temporary inventory overlay
+    _INLINE_DEVICES.clear()
+    for d in device_dicts:
+        _INLINE_DEVICES[d["name"]] = d
+    try:
+        result = _run_cmd(cmd_stack_deploy, {"stack": stack_name})
+    finally:
+        _INLINE_DEVICES.clear()
+
+    success = result["ok"]
+    return {
+        "ok": success,
+        "stack": stack_name,
+        "success": success,
+        "results": [{"device": d["name"], "success": success} for d in device_dicts],
+        "output": result["output"],
+    }
+
+
+def _op_delete_stack(stack_name, device_dicts):
+    """Delete a stack using inline device dicts instead of inventory."""
+    _INLINE_DEVICES.clear()
+    for d in device_dicts:
+        _INLINE_DEVICES[d["name"]] = d
+    try:
+        result = _run_cmd(cmd_stack_delete, {"stack": stack_name})
+    finally:
+        _INLINE_DEVICES.clear()
+
+    success = result["ok"]
+    return {
+        "ok": success,
+        "stack": stack_name,
+        "success": success,
+        "results": [{"device": d["name"], "success": success} for d in device_dicts],
+        "output": result["output"],
+    }
+
+
+# ---------------------------------------------------------------------------
+# API server
+# ---------------------------------------------------------------------------
+
 def _make_api_app():
-    """Create Flask app with all API routes."""
+    """Create Flask app with all API routes.
+
+    Response modes:
+      - Accept: application/json → structured JSON responses (new)
+      - Otherwise → legacy {ok, exit_code, output} text capture
+    """
     from flask import Flask, jsonify, request
 
     app = Flask("nsci")
@@ -2240,24 +2806,77 @@ def _make_api_app():
         if auth != f"Bearer {api_token}":
             return jsonify({"ok": False, "error": "unauthorized"}), 401
 
+    def _wants_structured():
+        """Check if client wants structured JSON responses."""
+        accept = request.headers.get("Accept", "")
+        return "application/json" in accept
+
+    def _try_structured(structured_fn, legacy_fn):
+        """Return structured response if requested, otherwise legacy text capture."""
+        if _wants_structured():
+            try:
+                return jsonify(structured_fn())
+            except SystemExit:
+                return jsonify({"ok": False, "error": "operation failed"}), 500
+            except Exception as e:
+                return jsonify({"ok": False, "error": str(e)}), 500
+        return jsonify(legacy_fn())
+
     # --- Device endpoints ---
 
     @app.get("/api/v1/status")
     def api_status():
-        return jsonify(_run_cmd(cmd_status, {}))
+        return _try_structured(
+            _structured_status,
+            lambda: _run_cmd(cmd_status, {}),
+        )
 
     @app.get("/api/v1/devices/<device>")
     def api_show(device):
         section = request.args.get("section")
+        if _wants_structured():
+            try:
+                config = load_config(device)
+                if section:
+                    # Navigate to section
+                    current = config
+                    for part in section.strip("/").split("/"):
+                        if isinstance(current, dict):
+                            matched = None
+                            for key in current:
+                                clean = key.split(":")[-1] if ":" in key else key
+                                if clean == part:
+                                    matched = key
+                                    break
+                            if matched:
+                                current = current[matched]
+                            else:
+                                return jsonify({"ok": False, "error": f"section not found: {part}"}), 404
+                    return jsonify({"ok": True, "device": device, "config": current})
+                return jsonify({"ok": True, "device": device, "config": config})
+            except SystemExit:
+                return jsonify({"ok": False, "error": f"no config file for {device}"}), 404
+            except Exception as e:
+                return jsonify({"ok": False, "error": str(e)}), 500
         return jsonify(_run_cmd(cmd_show, {"device": device, "section": section}))
 
     @app.post("/api/v1/devices/<device>/pull")
     def api_pull(device):
-        return jsonify(_run_cmd(cmd_pull, {"device": device}))
+        return _try_structured(
+            lambda: _structured_pull(device),
+            lambda: _run_cmd(cmd_pull, {"device": device}),
+        )
 
     @app.post("/api/v1/devices/<device>/push")
     def api_push(device):
         body = request.get_json(silent=True) or {}
+        if _wants_structured():
+            try:
+                if not body.get("full_replace", False):
+                    return jsonify({"ok": False, "error": "full_replace required"}), 400
+                return jsonify(_structured_push(device))
+            except Exception as e:
+                return jsonify({"ok": False, "error": str(e)}), 500
         return jsonify(_run_cmd(cmd_push, {
             "devices": [device],
             "full_replace": body.get("full_replace", False),
@@ -2267,15 +2886,23 @@ def _make_api_app():
 
     @app.get("/api/v1/devices/<device>/diff")
     def api_diff(device):
-        return jsonify(_run_cmd(cmd_diff, {"device": device}))
+        return _try_structured(
+            lambda: _structured_diff(device),
+            lambda: _run_cmd(cmd_diff, {"device": device}),
+        )
 
     @app.get("/api/v1/devices/<device>/validate")
     def api_validate(device):
-        return jsonify(_run_cmd(cmd_validate, {"device": device}))
+        return _try_structured(
+            lambda: _structured_validate(device),
+            lambda: _run_cmd(cmd_validate, {"device": device}),
+        )
 
     @app.get("/api/v1/devices/<device>/history")
     def api_history(device):
         count = request.args.get("count", 10, type=int)
+        if _wants_structured():
+            return jsonify(_structured_history(device, count))
         diff = request.args.get("diff", None, type=int)
         return jsonify(_run_cmd(cmd_history, {"device": device, "count": count, "diff": diff}))
 
@@ -2285,6 +2912,12 @@ def _make_api_app():
         version = body.get("version")
         if version is None:
             return jsonify({"ok": False, "error": "version required"}), 400
+        if _wants_structured():
+            try:
+                return jsonify(_structured_rollback(
+                    device, int(version), no_push=body.get("no_push", False)))
+            except Exception as e:
+                return jsonify({"ok": False, "error": str(e)}), 500
         return jsonify(_run_cmd(cmd_rollback, {
             "device": device,
             "version": int(version),
@@ -2295,30 +2928,140 @@ def _make_api_app():
 
     @app.get("/api/v1/library")
     def api_library_list():
-        return jsonify(_run_cmd(cmd_library, {"service": None}))
+        return _try_structured(
+            _structured_library_list,
+            lambda: _run_cmd(cmd_library, {"service": None}),
+        )
 
     @app.get("/api/v1/library/<service>")
     def api_library_detail(service):
-        return jsonify(_run_cmd(cmd_library, {"service": service}))
+        return _try_structured(
+            lambda: _structured_library_detail(service),
+            lambda: _run_cmd(cmd_library, {"service": service}),
+        )
 
     # --- Stack endpoints ---
 
     @app.get("/api/v1/stacks")
     def api_stack_list():
-        return jsonify(_run_cmd(cmd_stack_list, {}))
+        return _try_structured(
+            _structured_stack_list,
+            lambda: _run_cmd(cmd_stack_list, {}),
+        )
 
     @app.get("/api/v1/stacks/<stack>/render")
     def api_stack_render(stack):
         delete = request.args.get("delete", "false").lower() == "true"
-        return jsonify(_run_cmd(cmd_stack_render, {"stack": stack, "delete": delete}))
+        return _try_structured(
+            lambda: _structured_stack_render(stack, delete),
+            lambda: _run_cmd(cmd_stack_render, {"stack": stack, "delete": delete}),
+        )
 
     @app.post("/api/v1/stacks/<stack>/deploy")
     def api_stack_deploy(stack):
-        return jsonify(_run_cmd(cmd_stack_deploy, {"stack": stack}))
+        return _try_structured(
+            lambda: _structured_stack_deploy(stack),
+            lambda: _run_cmd(cmd_stack_deploy, {"stack": stack}),
+        )
 
     @app.post("/api/v1/stacks/<stack>/delete")
     def api_stack_delete(stack):
-        return jsonify(_run_cmd(cmd_stack_delete, {"stack": stack}))
+        return _try_structured(
+            lambda: _structured_stack_delete(stack),
+            lambda: _run_cmd(cmd_stack_delete, {"stack": stack}),
+        )
+
+    # --- Inline device operations (no inventory.yaml needed) ---
+
+    @app.post("/api/v1/operations/pull")
+    def api_op_pull():
+        body = request.get_json(silent=True)
+        if not body or "device" not in body:
+            return jsonify({"ok": False, "error": "device object required in body"}), 400
+        device_dict = body["device"]
+        for field in ("name", "hostname", "driver", "credential"):
+            if field not in device_dict:
+                return jsonify({"ok": False, "error": f"device.{field} required"}), 400
+        try:
+            return jsonify(_op_pull(device_dict))
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 500
+
+    @app.post("/api/v1/operations/push")
+    def api_op_push():
+        body = request.get_json(silent=True)
+        if not body or "device" not in body:
+            return jsonify({"ok": False, "error": "device object required in body"}), 400
+        device_dict = body["device"]
+        for field in ("name", "hostname", "driver", "credential"):
+            if field not in device_dict:
+                return jsonify({"ok": False, "error": f"device.{field} required"}), 400
+        if not body.get("full_replace", False):
+            return jsonify({"ok": False, "error": "full_replace required"}), 400
+        try:
+            return jsonify(_op_push(device_dict, full_replace=True))
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 500
+
+    @app.post("/api/v1/operations/diff")
+    def api_op_diff():
+        body = request.get_json(silent=True)
+        if not body or "device" not in body:
+            return jsonify({"ok": False, "error": "device object required in body"}), 400
+        device_dict = body["device"]
+        for field in ("name", "hostname", "driver", "credential"):
+            if field not in device_dict:
+                return jsonify({"ok": False, "error": f"device.{field} required"}), 400
+        try:
+            return jsonify(_op_diff(device_dict))
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 500
+
+    @app.post("/api/v1/operations/validate")
+    def api_op_validate():
+        body = request.get_json(silent=True)
+        if not body or "device" not in body:
+            return jsonify({"ok": False, "error": "device object required in body"}), 400
+        device_dict = body["device"]
+        for field in ("name", "hostname", "driver", "credential"):
+            if field not in device_dict:
+                return jsonify({"ok": False, "error": f"device.{field} required"}), 400
+        try:
+            return jsonify(_op_validate(device_dict))
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 500
+
+    @app.post("/api/v1/operations/deploy-stack")
+    def api_op_deploy_stack():
+        body = request.get_json(silent=True)
+        if not body or "stack" not in body:
+            return jsonify({"ok": False, "error": "stack name required"}), 400
+        if "devices" not in body or not body["devices"]:
+            return jsonify({"ok": False, "error": "devices array required"}), 400
+        for i, d in enumerate(body["devices"]):
+            for field in ("name", "hostname", "driver", "credential"):
+                if field not in d:
+                    return jsonify({"ok": False, "error": f"devices[{i}].{field} required"}), 400
+        try:
+            return jsonify(_op_deploy_stack(body["stack"], body["devices"]))
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 500
+
+    @app.post("/api/v1/operations/delete-stack")
+    def api_op_delete_stack():
+        body = request.get_json(silent=True)
+        if not body or "stack" not in body:
+            return jsonify({"ok": False, "error": "stack name required"}), 400
+        if "devices" not in body or not body["devices"]:
+            return jsonify({"ok": False, "error": "devices array required"}), 400
+        for i, d in enumerate(body["devices"]):
+            for field in ("name", "hostname", "driver", "credential"):
+                if field not in d:
+                    return jsonify({"ok": False, "error": f"devices[{i}].{field} required"}), 400
+        try:
+            return jsonify(_op_delete_stack(body["stack"], body["devices"]))
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 500
 
     # --- Health ---
 
@@ -2455,6 +3198,95 @@ def _make_api_app():
                     "tags": ["library"],
                     "parameters": [{"name": "service", "in": "path", "required": True, "schema": {"type": "string"}}],
                     "responses": {"200": {"description": "Template details"}},
+                }
+            },
+            "/api/v1/operations/pull": {
+                "post": {
+                    "summary": "Pull config from device using inline credentials (no inventory needed)",
+                    "tags": ["operations"],
+                    "requestBody": {
+                        "required": True,
+                        "content": {"application/json": {"schema": {"type": "object", "properties": {
+                            "device": {"type": "object", "description": "Inline device connection info", "properties": {
+                                "name": {"type": "string"}, "hostname": {"type": "string"},
+                                "driver": {"type": "string"}, "credential": {"type": "object", "properties": {
+                                    "username": {"type": "string"}, "password": {"type": "string"},
+                                }},
+                            }, "required": ["name", "hostname", "driver", "credential"]},
+                        }, "required": ["device"]}}}
+                    },
+                    "responses": {"200": {"description": "Pull result with structured config"}},
+                }
+            },
+            "/api/v1/operations/push": {
+                "post": {
+                    "summary": "Push config to device using inline credentials",
+                    "tags": ["operations"],
+                    "requestBody": {
+                        "required": True,
+                        "content": {"application/json": {"schema": {"type": "object", "properties": {
+                            "device": {"type": "object", "description": "Inline device connection info"},
+                            "full_replace": {"type": "boolean", "description": "Required — confirms full config replace"},
+                        }, "required": ["device", "full_replace"]}}}
+                    },
+                    "responses": {"200": {"description": "Push result"}},
+                }
+            },
+            "/api/v1/operations/diff": {
+                "post": {
+                    "summary": "Compare local config vs live device using inline credentials",
+                    "tags": ["operations"],
+                    "requestBody": {
+                        "required": True,
+                        "content": {"application/json": {"schema": {"type": "object", "properties": {
+                            "device": {"type": "object", "description": "Inline device connection info"},
+                        }, "required": ["device"]}}}
+                    },
+                    "responses": {"200": {"description": "Diff result with sections"}},
+                }
+            },
+            "/api/v1/operations/validate": {
+                "post": {
+                    "summary": "Validate device matches config file using inline credentials",
+                    "tags": ["operations"],
+                    "requestBody": {
+                        "required": True,
+                        "content": {"application/json": {"schema": {"type": "object", "properties": {
+                            "device": {"type": "object", "description": "Inline device connection info"},
+                        }, "required": ["device"]}}}
+                    },
+                    "responses": {"200": {"description": "Validation result"}},
+                }
+            },
+            "/api/v1/operations/deploy-stack": {
+                "post": {
+                    "summary": "Deploy a stack using inline device credentials",
+                    "tags": ["operations"],
+                    "requestBody": {
+                        "required": True,
+                        "content": {"application/json": {"schema": {"type": "object", "properties": {
+                            "stack": {"type": "string", "description": "Stack name"},
+                            "devices": {"type": "array", "items": {"type": "object", "properties": {
+                                "name": {"type": "string"}, "hostname": {"type": "string"},
+                                "driver": {"type": "string"}, "credential": {"type": "object"},
+                            }}},
+                        }, "required": ["stack", "devices"]}}}
+                    },
+                    "responses": {"200": {"description": "Deploy result with per-device status"}},
+                }
+            },
+            "/api/v1/operations/delete-stack": {
+                "post": {
+                    "summary": "Delete a stack using inline device credentials",
+                    "tags": ["operations"],
+                    "requestBody": {
+                        "required": True,
+                        "content": {"application/json": {"schema": {"type": "object", "properties": {
+                            "stack": {"type": "string", "description": "Stack name"},
+                            "devices": {"type": "array", "items": {"type": "object"}},
+                        }, "required": ["stack", "devices"]}}}
+                    },
+                    "responses": {"200": {"description": "Delete result with per-device status"}},
                 }
             },
         },
